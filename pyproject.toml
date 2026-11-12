@@ -30,6 +30,14 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+# Remote collection over PowerShell remoting. Reading files needs no dependencies.
+live = ["pypsrp>=0.8"]
+keyring = ["keyring>=25"]
+vault = ["hvac>=2.3"]
+aws = ["boto3>=1.35"]
+azure = ["azure-identity>=1.19", "azure-keyvault-secrets>=4.9"]
+
 [project.scripts]
 mishpat = "faithful_mishpat.cli:main"
 
