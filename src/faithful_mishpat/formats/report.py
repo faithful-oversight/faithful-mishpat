@@ -196,7 +196,10 @@ def canonical(
     for child in element:
         name = _local(child)
         if name not in _IGNORED:
-            children.setdefault(name, []).append(canonical(child, drop=drop, sort=sort))
+            item = canonical(child, drop=drop, sort=sort)
+            if hidden.is_hidden_name(name) and isinstance(item, str):
+                item = hidden.hide(item)
+            children.setdefault(name, []).append(item)
     if not attributes and not children:
         return text
     out: dict[str, ValueData] = {

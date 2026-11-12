@@ -199,6 +199,16 @@ def test_inputs_that_cannot_be_read_are_input_errors(
     assert not out.exists()
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
+def test_a_named_pipe_input_is_refused_not_read(
+    pair: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pipe = tmp_path / "pipe.xml"
+    os.mkfifo(pipe)
+    assert compare(pair[0], pipe, tmp_path / "out") == ExitCode.INPUT_ERROR
+    assert "neither a regular file nor a folder" in capsys.readouterr().err
+
+
 def test_an_error_message_cannot_print_control_characters(
     pair: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

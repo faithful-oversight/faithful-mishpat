@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 import pytest
@@ -446,7 +447,9 @@ def test_folder_tree_does_not_follow_links(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr(
         FolderTree, "_is_link", staticmethod(lambda entry: entry.name == "linked.txt")
     )
-    assert FolderTree(tmp_path).entries("") == [("real.txt", False)]
+    tree = FolderTree(tmp_path)
+    assert tree.entries("") == [("real.txt", False)]
+    assert tree.skipped == ["linked.txt"]
 
 
 def test_a_real_symlink_is_treated_as_absent(tmp_path: Path) -> None:
@@ -459,7 +462,36 @@ def test_a_real_symlink_is_treated_as_absent(tmp_path: Path) -> None:
         (inside / "link").symlink_to(outside, target_is_directory=True)
     except OSError:  # no symlink privilege (Windows): the monkeypatched test above covers the code
         return
-    assert FolderTree(inside).entries("") == []
+    tree = FolderTree(inside)
+    assert tree.entries("") == []
+    assert tree.skipped == ["link"]
+
+
+def test_a_skipped_link_makes_the_read_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    files = backup_files(report=report(), machine_pol=registry_pol(POL))
+    linked = next(p for p in files if p.lower().endswith("machine/registry.pol"))
+    monkeypatch.setattr(
+        FolderTree, "_is_link", staticmethod(lambda entry: entry.name.lower() == "registry.pol")
+    )
+    result = read_folder(tmp_path, files)
+    assert [(p.source.detail, p.reason) for p in result.problems] == [
+        (linked, "is a link or a special file; mishpat does not follow or read it")
+    ]
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
+def test_a_named_pipe_is_skipped_not_read(tmp_path: Path) -> None:
+    files = backup_files(report=report(), machine_pol=registry_pol(POL))
+    write_tree(tmp_path, files)
+    pipe = next(p for p in tmp_path.rglob("*") if p.name.lower() == "registry.pol")
+    pipe.unlink()
+    os.mkfifo(pipe)
+    result = read_backups(FolderTree(tmp_path), "in")
+    assert any(p.reason.startswith("is a link or a special file") for p in result.problems)
+    with pytest.raises(TreeError, match="is a link or a special file"):
+        FolderTree(tmp_path).read(pipe.relative_to(tmp_path).as_posix())
 
 
 def test_listing_error_is_an_input_error(tmp_path: Path) -> None:

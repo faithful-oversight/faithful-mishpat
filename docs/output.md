@@ -107,7 +107,7 @@ Each difference has a category, a kind, the GPO it concerns, a subject, the valu
 | `labels` | Words that a reader shows beside a value, keyed by the value as text: the name of an account beside its SID, or the meaning of a security option beside its number. mishpat never compares them. An empty object when there are none. |
 | `sources` | Where each side was read, before first. A file inside a bundle is written `bundle.jsonl:path/inside`. When only one side is listed, it is the side that holds the item. |
 
-In Markdown and HTML, a value that is not set shows as `(not set)`. Text with spaces at its edges is shown in quotes. A value that has a label shows it in brackets after the value. When both sides are mappings, only the keys that differ are shown. Then, a list shows as its items joined by commas, and a mapping shows as `name: value` pairs joined by semicolons. The CSV report writes lists and mappings as JSON. The JSON report keeps the exact values.
+In Markdown and HTML, a value that is not set shows as `(not set)`. Text with spaces at its edges is shown in quotes. In Markdown, an invisible word joiner (U+2060) follows each `@`, `://` and `www.` so that a viewer does not turn text such as `@action`, an address or an email address into a link or a mention; text copied from the Markdown report holds it. The JSON report does not. A value that has a label shows it in brackets after the value. When both sides are mappings, only the keys that differ are shown. Then, a list shows as its items joined by commas, and a mapping shows as `name: value` pairs joined by semicolons. The CSV report writes lists and mappings as JSON. The JSON report keeps the exact values.
 
 Differences are in the order of the GPO's name, then the order of the categories, with scope differences last.
 
@@ -135,7 +135,7 @@ Differences are in the order of the GPO's name, then the order of the categories
 | `only-before` | A GPO is in the before input only, and the inputs are not both whole domains. |
 | `only-after` | A GPO is in the after input only, and the inputs are not both whole domains. |
 
-`added` and `removed` describe a GPO only when both inputs are whole domains: a `Get-GPOReport -All` file, or an export bundle whose scope is `all`. Then a GPO that is missing was deleted, and a GPO that is new was created. When either input is a selection, such as one backup or a bundle of chosen GPOs, a GPO missing from the other side may simply not have been exported. mishpat then says `only-before` or `only-after`, and adds a notice that says why.
+`added` and `removed` describe a GPO only when both inputs are whole domains, a `Get-GPOReport -All` file or an export bundle whose scope is `all`, and nothing in either input failed to be read. A GPO that could not be read is missing from its side, so after a problem a lone GPO is `only-before` or `only-after`, with a notice. Then a GPO that is missing was deleted, and a GPO that is new was created. When either input is a selection, such as one backup or a bundle of chosen GPOs, a GPO missing from the other side may simply not have been exported. mishpat then says `only-before` or `only-after`, and adds a notice that says why.
 
 An added or removed GPO is one difference. mishpat does not list its settings one by one.
 
@@ -253,7 +253,7 @@ The file is UTF-8 with no byte order mark, and its rows end with CRLF. A spreads
 
 ### Formula neutralization
 
-A spreadsheet can run a cell that starts with `=`, `+`, `-`, or `@`, or with a tab, a carriage return, or a line feed, as a formula. Some programs also accept the full-width forms of those four characters. mishpat gives every such cell a leading apostrophe, which spreadsheets show as plain text. Opening the file cannot run anything.
+A spreadsheet can run a cell that starts with `=`, `+`, `-`, or `@`, or with a tab, a carriage return, or a line feed, as a formula. Some programs also accept the full-width forms of those four characters. mishpat gives every such cell a leading apostrophe, which spreadsheets show as plain text. Opening the file cannot run anything. This includes negative numbers: `-1` is written `'-1`. A program that reads the CSV should strip one leading apostrophe from a cell, or read the JSON report instead.
 
 ## HTML report
 

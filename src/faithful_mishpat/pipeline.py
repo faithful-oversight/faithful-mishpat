@@ -49,6 +49,9 @@ def fingerprint(path: Path) -> tuple[int, str]:
         InputError: Something cannot be read.
     """
     if not path.is_dir():
+        if path.exists() and not path.is_file():
+            msg = f"cannot read {display_name(path)}: it is neither a regular file nor a folder"
+            raise InputError(msg)
         return _file(path)
     lines = hashlib.sha256()
     total = 0

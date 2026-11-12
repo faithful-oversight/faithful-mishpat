@@ -157,7 +157,7 @@ def parse(data: bytes, *, max_bytes: int | None = None) -> ET.Element:
         parser.Parse(text, True)  # noqa: FBT003 - expat's own signature
     except expat.ExpatError as exc:
         reason = expat.ErrorString(exc.code)
-        msg = f"the XML is not well-formed ({reason}, line {exc.lineno}, column {exc.offset})"
+        msg = f"the XML is not well-formed: {reason} at line {exc.lineno}, column {exc.offset}"
         raise XmlError(msg) from None
     assert builder.root is not None  # noqa: S101 - expat refuses a document with no root
     return builder.root

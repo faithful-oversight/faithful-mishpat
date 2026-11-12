@@ -56,7 +56,9 @@ def compare(before: Snapshot, after: Snapshot, *, match: str = "guid") -> Compar
     result = Comparison(before.label, after.label, match)
     result.problems = [*before.problems, *after.problems]
     left, right = _keyed(before, match), _keyed(after, match)
-    whole = before.domain_wide and after.domain_wide
+    # A GPO that could not be read is missing from its side, so only two whole domains
+    # read without a problem can say a GPO was created or deleted.
+    whole = _whole(before) and _whole(after)
     for key in sorted(left.keys() | right.keys(), key=lambda k: _name_of(left, right, k)):
         old, new = left.get(key), right.get(key)
         if old is not None and new is not None:
@@ -382,9 +384,7 @@ def _compare_scopes(before: Snapshot, after: Snapshot, result: Comparison) -> No
         **{g.guid: g.name for g in before.gpos.values()},
         **{g.guid: g.name for g in after.gpos.values()},
     }
-    _one_sided_scopes(
-        before.scopes, after.scopes, result, whole=before.domain_wide and after.domain_wide
-    )
+    _one_sided_scopes(before.scopes, after.scopes, result, whole=_whole(before) and _whole(after))
     for path in sorted(before.scopes.keys() & after.scopes.keys()):
         was, now = before.scopes[path], after.scopes[path]
         sources: tuple[Source, ...] = (was.source, now.source)
@@ -424,6 +424,10 @@ def _compare_scopes(before: Snapshot, after: Snapshot, result: Comparison) -> No
                     note=note,
                 )
             )
+
+
+def _whole(snapshot: Snapshot) -> bool:
+    return snapshot.domain_wide and not snapshot.problems
 
 
 def _one_sided_scopes(
@@ -480,11 +484,18 @@ def _explain(
             )
         else:
             result.notices.append("The two inputs share no GPO by name.")
-    if not (before.domain_wide and after.domain_wide) and (left.keys() ^ right.keys()):
-        result.notices.append(
-            "At least one input is a selection of GPOs rather than a whole domain, so a GPO "
-            "in only one input is listed as only before or only after, not as added or removed."
-        )
+    if left.keys() ^ right.keys():
+        if not (before.domain_wide and after.domain_wide):
+            result.notices.append(
+                "At least one input is a selection of GPOs rather than a whole domain, so a "
+                "GPO in only one input is listed as only before or only after, not as added "
+                "or removed."
+            )
+        elif not (_whole(before) and _whole(after)):
+            result.notices.append(
+                "Something in the inputs could not be read, so a GPO in only one input is "
+                "listed as only before or only after: it may be the one that could not be read."
+            )
     if not result.problems:
         return
     result.notices.append(

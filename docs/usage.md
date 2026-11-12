@@ -44,7 +44,7 @@ A problem inside an input does not stop the run. mishpat lists a record or a fil
 
 Give mishpat the backup folder, or the root that holds the backups, and not a parent folder that holds other data. To record the size and SHA-256 of a folder, mishpat reads every file under it, including files it does not parse.
 
-Name the two inputs differently. A report names each input by its file or folder name only, so two inputs with the same name, such as `before/gpos.jsonl` and `after/gpos.jsonl`, make a problem in the report hard to place.
+A report names each input by its file or folder name only. When both have the same name, such as `monday/gpos.jsonl` and `friday/gpos.jsonl`, mishpat cites them as `before/gpos.jsonl` and `after/gpos.jsonl`.
 
 ### Pairing by name
 

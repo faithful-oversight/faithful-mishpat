@@ -126,7 +126,7 @@ A root that holds two backups of the same GPO is ambiguous, and mishpat refuses 
 
 ### What mishpat reads
 
-mishpat reads four files and ignores the rest. It looks up names without regard to case, and it does not follow links.
+mishpat reads four files and ignores the rest. It looks up names without regard to case. It does not follow links or read special files such as named pipes; each one it meets is listed as a problem, so the report does not claim the input was read in full.
 
 | File | What mishpat takes from it |
 | --- | --- |

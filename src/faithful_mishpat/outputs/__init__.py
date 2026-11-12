@@ -147,7 +147,7 @@ def _context(gpo: Gpo) -> dict[str, Any]:
 
 
 def _note(note: str, before: Any, after: Any) -> str:
-    if not hidden.differs_only_when_hidden(before, after):
+    if before is None or after is None or not hidden.password_changed(before, after):
         return note
     said = "A stored password changed; mishpat never shows stored passwords."
     return f"{note} {said}" if note else said

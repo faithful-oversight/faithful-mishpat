@@ -397,6 +397,14 @@ def test_problems_make_the_comparison_incomplete() -> None:
     assert any("could not be read" in n for n in result.notices)
 
 
+def test_a_problem_in_a_whole_domain_makes_a_lone_gpo_only_one_side() -> None:
+    broken = side(gpo(), whole=True, problems=[Problem(HERE, "bkupInfo.xml has a bad hash")])
+    after = side(gpo(), gpo(OTHER, "Second"), label="after", whole=True)
+    result = compare(broken, after)
+    assert kinds(result) == [("gpo", "only-after", "Second")]
+    assert any("may be the one that could not be read" in n for n in result.notices)
+
+
 def test_differences_are_ordered_by_gpo_then_category() -> None:
     zed = gpo(OTHER, "Zed", settings=[])
     changed = replace(zed, settings=[setting("A", 1)])

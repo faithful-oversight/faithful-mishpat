@@ -395,6 +395,55 @@ def wql(parm2: str) -> str:
     return "\n".join(queries) if queries and not rest.strip() else parm2
 
 
+_HEX = frozenset("0123456789abcdefABCDEF")
+
+
+def _rdns(dn: str) -> list[tuple[str, str]] | None:
+    r"""Split a distinguished name into (type, value) pairs as RFC 4514 writes them.
+
+    A backslash keeps the next character (``\,``), or with two hex digits gives one
+    byte of UTF-8 (``\2C``). Unescaped spaces around a type or value are dropped, but
+    an escaped space is kept. Returns ``None`` when ``dn`` is not a distinguished name.
+    """
+    out: list[tuple[str, str]] = []
+    # Each part is (bytes, escaped); a part's bytes are one character or one hex byte.
+    name: list[tuple[bytes, bool]] | None = None
+    value: list[tuple[bytes, bool]] = []
+    i = 0
+    while i < len(dn) + 1:
+        char = dn[i] if i < len(dn) else ","
+        if char == "\\" and i + 1 < len(dn):
+            pair = dn[i + 1 : i + 3]
+            if len(pair) == 2 and set(pair) <= _HEX:  # noqa: PLR2004 - two hex digits
+                value.append((bytes.fromhex(pair), True))
+                i += 3
+            else:
+                value.append((dn[i + 1].encode("utf-8"), True))
+                i += 2
+            continue
+        if char == "=" and name is None:
+            name, value = value, []
+        elif char == ",":
+            if name is None:
+                return None
+            out.append((_join(name).upper(), _join(value)))
+            name, value = None, []
+        else:
+            value.append((char.encode("utf-8"), False))
+        i += 1
+    return out
+
+
+def _join(parts: list[tuple[bytes, bool]]) -> str:
+    """Join parts, dropping unescaped spaces at both ends."""
+    start, end = 0, len(parts)
+    while start < end and parts[start] == (b" ", False):
+        start += 1
+    while end > start and parts[end - 1] == (b" ", False):
+        end -= 1
+    return b"".join(p for p, _ in parts[start:end]).decode("utf-8", "replace")
+
+
 def som_path(dn: str, kind: str) -> str:
     """Write a scope's distinguished name as a report ``SOMPath``.
 
@@ -402,12 +451,9 @@ def som_path(dn: str, kind: str) -> str:
     ``corp.example/A/B``; a site is its name. A name that is not a distinguished name is
     returned unchanged.
     """
-    rdns = []
-    for rdn in re.split(r"(?<!\\),", dn):
-        name, sep, value = rdn.strip().partition("=")
-        if not sep:
-            return dn
-        rdns.append((name.strip().upper(), re.sub(r"\\(.)", r"\1", value.strip())))
+    rdns = _rdns(dn)
+    if rdns is None:
+        return dn
     if kind == "site":
         return rdns[0][1]
     domain = ".".join(value for name, value in rdns if name == "DC")

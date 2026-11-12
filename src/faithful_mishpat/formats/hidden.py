@@ -47,6 +47,19 @@ def conceal(value: Any) -> Any:
     return value
 
 
-def differs_only_when_hidden(before: Any, after: Any) -> bool:
-    """Say whether two values differ but look the same once concealed."""
-    return bool(before != after and conceal(before) == conceal(after))
+def _stand_ins(value: Any, path: tuple[str, ...] = ()) -> set[tuple[tuple[str, ...], str]]:
+    if isinstance(value, str):
+        return {(path, value)} if value.startswith(PREFIX) else set()
+    if isinstance(value, dict):
+        return {f for k, v in value.items() for f in _stand_ins(v, (*path, str(k)))}
+    if isinstance(value, list | tuple):
+        return {f for i, v in enumerate(value) for f in _stand_ins(v, (*path, str(i)))}
+    return set()
+
+
+def password_changed(before: Any, after: Any) -> bool:
+    """Say whether a stored password differs between two values, wherever it sits.
+
+    A password present on one side only counts as a change; so does one that moved.
+    """
+    return _stand_ins(before) != _stand_ins(after)

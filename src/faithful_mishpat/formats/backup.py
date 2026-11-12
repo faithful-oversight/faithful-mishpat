@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import uuid
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Protocol
@@ -87,26 +88,34 @@ class Tree(Protocol):
 
 
 class FolderTree:
-    """A real folder. Links are not followed: a link is treated as absent."""
+    """A real folder. Links and special files are not followed or read.
+
+    Each one that a listing meets is recorded in :attr:`skipped`, so the reader can say
+    the input was not read in full.
+    """
 
     def __init__(self, root: Path) -> None:
         """Read the folder at ``root``."""
         self.root = root
+        self.skipped: list[str] = []
 
     @staticmethod
     def _is_link(entry: os.DirEntry[str]) -> bool:
         return entry.is_symlink()
 
     def entries(self, path: str) -> list[tuple[str, bool]]:
-        """List a folder, leaving out links."""
+        """List a folder, leaving out links and anything that is not a file or folder."""
         folder = self.root.joinpath(*path.split("/")) if path else self.root
         try:
             with os.scandir(folder) as scan:
-                return sorted(
-                    (entry.name, entry.is_dir(follow_symlinks=False))
-                    for entry in scan
-                    if not self._is_link(entry)
-                )
+                kept = []
+                for entry in scan:
+                    is_dir = entry.is_dir(follow_symlinks=False)
+                    if self._is_link(entry) or not (is_dir or entry.is_file(follow_symlinks=False)):
+                        self.skipped.append(f"{path}/{entry.name}" if path else entry.name)
+                        continue
+                    kept.append((entry.name, is_dir))
+                return sorted(kept)
         except OSError as exc:
             msg = f"cannot list {path or '.'}: {exc.strerror or exc}"
             raise TreeError(msg) from None
@@ -115,7 +124,11 @@ class FolderTree:
         """Return a file's bytes."""
         target = self.root.joinpath(*path.split("/"))
         try:
-            if target.stat().st_size > MAX_FILE:
+            facts = target.lstat()
+            if not stat.S_ISREG(facts.st_mode):
+                msg = f"{path} is a link or a special file, which mishpat does not read"
+                raise TreeError(msg)
+            if facts.st_size > MAX_FILE:
                 msg = f"{path} is larger than {MAX_FILE} bytes"
                 raise TreeError(msg)
             return target.read_bytes()
@@ -414,5 +427,7 @@ def read_backups(
             raise InputError(msg)
         seen[gpo.guid] = folder
         result.gpos.append(gpo)
+    for path in sorted(set(getattr(tree, "skipped", ()))):
+        reader.problem(path, "is a link or a special file; mishpat does not follow or read it")
     result.problems = reader.problems
     return result

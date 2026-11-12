@@ -61,6 +61,10 @@ A report can hold two settings with the same identity in one GPO.
 - **Directives are compared as written.** An entry such as `**del.Name` or `**DeleteValues` is a setting of its own. mishpat never applies it to the values. Removing a directive shows as a removal of that entry.
 - **Values show their type and data.** The report shows `type: REG_DWORD; data: 4`. mishpat does not say which policy the value belongs to.
 
+## Spaces at the edges of values
+
+`Get-GPOReport` XML is indented, so mishpat trims spaces and line breaks at the edges of every text value it reads from a report or a backup's `gpreport.xml`. A change that only adds or removes such spaces, for example two spaces added after `C:\x` in a registry setting, is not reported. `Registry.pol` values are binary and are compared exactly, so the same change made there is reported.
+
 ## Pairing by name
 
 `--match name` pairs GPOs by display name. See [Command reference](usage.md#pairing-by-name). It has these limits:
@@ -76,9 +80,15 @@ A report names each input by its file or folder name only. When the two inputs h
 
 ## Paths of links
 
+A slash in an organizational unit's name reads the same as a nested unit: `OU=A/B` and `OU=B` inside `OU=A` are both `corp.example/A/B`, as in a `Get-GPOReport` path.
+
 A report writes a link target as a path such as `corp.example/Servers`. mishpat writes the target of a link from a bundle in the same form, converted from the distinguished name of the scope. mishpat compares them without regard to case.
 
 TODO(verify): the conversion has been checked against synthetic data only. Confirm on a real domain that a link in a `Get-GPOReport` file and the same link in an export bundle give the same path, including for sites and for organizational units whose names hold special characters. If they differ, a comparison of a report with a bundle shows each link as removed and added.
+
+## Inputs that change during a run
+
+mishpat records each input's size and SHA-256, then reads the input to compare it. If a file changes between the two, for example because a backup is still being written, the manifest describes a different version from the one compared. Compare inputs that nothing is writing to.
 
 ## Size limits
 
