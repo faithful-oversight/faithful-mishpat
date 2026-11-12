@@ -313,7 +313,11 @@ def test_strange_option_numbers_are_ignored_not_fatal(tmp_path: Path, options: s
 @pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="needs a non-root POSIX user")
 def test_an_unreadable_folder_is_a_problem(tmp_path: Path) -> None:
     before = backup(tmp_path / "before", report=report_bytes(gpo_xml()))
-    after = backup(tmp_path / "after", report=report_bytes(gpo_xml(name="Servers baseline 2")))
+    after = backup(
+        tmp_path / "after",
+        report=report_bytes(gpo_xml(name="Servers baseline 2")),
+        machine_pol=registry_pol(POL),
+    )
     locked = next(p for p in after.rglob("*") if p.is_dir() and p.name == "DomainSysvol")
     locked.chmod(0)
     try:
