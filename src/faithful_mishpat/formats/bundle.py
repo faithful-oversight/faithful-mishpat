@@ -724,7 +724,7 @@ def read_bundle(path: Path, name: str) -> BundleRead:
 
 
 def encode(header: dict[str, Any], files: dict[str, bytes], structure: dict[str, Any]) -> bytes:
-    """Build a bundle's bytes. This is the reference writer, used by tests and remote collection.
+    """Build a bundle's bytes. This is the reference writer the tests use.
 
     Args:
         header: The header line's object; its first key must be ``mishpat_export``.

@@ -44,9 +44,9 @@ Changed. 12 differences.
 
 | Subject | Kind | Before | After | Sources |
 | --- | --- | --- | --- | --- |
-| Turn off Autoplay | removed | state: Enabled; Turn off Autoplay on:: All drives | (not set) | before: corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml Computer/Registry/Policy\[Turn off Autoplay\] |
+| Turn off Autoplay | removed | state: Enabled; Turn off Autoplay on: All drives | (not set) | before: corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml Computer/Registry/Policy\[Turn off Autoplay\] |
 | Disable Windows Error Reporting | added | (not set) | state: Enabled | after: corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml Computer/Registry/Policy\[Disable Windows Error Reporting\] |
-| Configure Automatic Updates | changed | Configure automatic updating:: 3 - Auto download and notify for install | Configure automatic updating:: 4 - Auto download and schedule the install | before: corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml Computer/Registry/Policy\[Configure Automatic Updates\]; after: corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml Computer/Registry/Policy\[Configure Automatic Updates\] |
+| Configure Automatic Updates | changed | Configure automatic updating: 3 - Auto download and notify for install | Configure automatic updating: 4 - Auto download and schedule the install | before: corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml Computer/Registry/Policy\[Configure Automatic Updates\]; after: corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml Computer/Registry/Policy\[Configure Automatic Updates\] |
 
 ##### Computer · Advanced Audit
 
@@ -184,5 +184,5 @@ Changed. 8 differences.
 - WMI filters are compared by name and description, and by query text only when the input recorded it. mishpat does not evaluate a filter.
 - Link order, blocked inheritance and WMI query text are compared only when the input came from the mishpat exporter. Get-GPOReport files and Backup-GPO folders do not record them.
 - Security filtering and delegation are compared as the SIDs and rights on the GPO. Group membership is not expanded, so the report does not say who is covered.
-- Version numbers, modified times and explanation text are shown for context but are not compared, so saving a GPO without changing a setting shows no difference.
+- Version numbers, modified times and policy explanation text are neither compared nor shown, so saving a GPO without changing a setting shows no difference.
 - A difference shows what changed. It does not say whether the change is correct or approved.

@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from faithful_mishpat.errors import InputError
-from faithful_mishpat.formats import xmlsafe
+from faithful_mishpat.formats import hidden, xmlsafe
 from faithful_mishpat.model import (
     Gpo,
     Link,
@@ -183,7 +183,8 @@ def canonical(
     Namespaces are dropped from names, attributes are ``@name``, text beside children is
     ``#text``, repeated children are lists (sorted for the names in ``sort``), and
     ``xsi:nil`` is ``None``. The ignored names (see the module documentation) and the
-    attribute names in ``drop`` are left out. SIDs are upper case.
+    attribute names in ``drop`` are left out. SIDs are upper case. Stored passwords
+    (``cpassword``) are replaced by :func:`faithful_mishpat.formats.hidden.hide`.
     """
     if element.get(_XSI_NIL) == "true":
         return None
@@ -198,7 +199,10 @@ def canonical(
             children.setdefault(name, []).append(canonical(child, drop=drop, sort=sort))
     if not attributes and not children:
         return text
-    out: dict[str, ValueData] = {f"@{k}": _clean(v) for k, v in sorted(attributes.items())}
+    out: dict[str, ValueData] = {
+        f"@{k}": hidden.hide(v) if hidden.is_hidden_name(k) else _clean(v)
+        for k, v in sorted(attributes.items())
+    }
     if text:
         out["#text"] = text
     for name in sorted(children):
@@ -314,7 +318,8 @@ def _policy_state(state: str, parts: list[dict[str, ValueData]]) -> dict[str, Va
     """
     value: dict[str, ValueData] = {"state": state}
     for part in parts:
-        label = str(part["name"] or part["kind"])
+        # The editor writes many option names with a closing colon ("Size (KB):").
+        label = str(part["name"] or "").rstrip().rstrip(":").rstrip() or str(part["kind"])
         if label.casefold() == "state":
             label = f"{label} (option)"
         base, count = label, 1
@@ -650,7 +655,9 @@ def _gpp_item(
     )
     value: dict[str, ValueData] = {
         "attributes": {
-            k: _clean(v) for k, v in sorted(attributes.items()) if k not in _GPP_DROPPED
+            k: hidden.hide(v) if hidden.is_hidden_name(k) else _clean(v)
+            for k, v in sorted(attributes.items())
+            if k not in _GPP_DROPPED
         },
         "properties": canonical(holder) if holder is not None else None,
         "filters": canonical(f) if (f := _find(item, "Filters")) is not None else "",
@@ -661,7 +668,7 @@ def _gpp_item(
     identifier = (
         _guid_or_text(uid)
         if uid
-        else _gpp_fallback(prefs.tail, attributes, properties) or _hash(value)
+        else _gpp_fallback(prefs.tail, attributes, properties) or _hash(hidden.conceal(value))
     )
     title = attributes.get("name") or identifier
     order = _text(item, "GPOSettingOrder") or ""
@@ -712,7 +719,7 @@ def _generic_key(element: ET.Element, *, unique: bool, value: ValueData) -> tupl
     for name in ("Name", "name", "Id", "id", "Type", "type"):
         if element.get(name):
             return (element.get(name, ""),)
-    return () if unique else (_hash(value),)
+    return () if unique else (_hash(hidden.conceal(value)),)
 
 
 def _generic(scope: _Scope, element: ET.Element, *, unique: bool) -> None:

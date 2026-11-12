@@ -252,6 +252,18 @@ def test_policy_options_are_keyed_by_the_name_the_editor_shows() -> None:
     assert {"Same", "Same #2", "Same #3"} <= value.keys()
 
 
+def test_an_option_names_closing_colon_is_dropped() -> None:
+    body = (
+        "<q1:Numeric><q1:Name>Maximum size (KB): </q1:Name><q1:State>Enabled</q1:State>"
+        "<q1:Value>4096</q1:Value></q1:Numeric>"
+        "<q1:Numeric><q1:Name>:</q1:Name><q1:State>Enabled</q1:State><q1:Value>1</q1:Value>"
+        "</q1:Numeric>"
+    )
+    value = policy_value(only(one(computer=registry_ext(policy("P", "Enabled", body=body)))))
+    assert value["Maximum size (KB)"] == 4096
+    assert value["Numeric"] == 1  # a name that is only a colon falls back to the kind
+
+
 def test_list_box_options_travel_with_the_value() -> None:
     body = """<q1:ListBox><q1:Name>Rules</q1:Name><q1:State>Enabled</q1:State>
       <q1:Additive>true</q1:Additive>

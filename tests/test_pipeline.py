@@ -243,3 +243,22 @@ def test_names_that_cannot_be_encoded_are_shown_escaped(tmp_path: Path) -> None:
     (tmp_path / "after.xml").write_bytes(fx.report_bytes(gpo(state="Disabled")))
     _, _, inputs = pipeline.run(odd, tmp_path / "after.xml")
     assert inputs[0].name == "bad\\xff.xml"
+
+
+def test_inputs_with_the_same_name_are_cited_with_their_side(tmp_path: Path) -> None:
+    before = backup(tmp_path / "monday" / "Backups", "Enabled")
+    after = backup(tmp_path / "friday" / "Backups", "Disabled")
+    comparison, _after, inputs = pipeline.run(before, after)
+    assert (comparison.before, comparison.after) == ("before/Backups", "after/Backups")
+    assert [i.name for i in inputs] == ["before/Backups", "after/Backups"]
+    files = {s.file for d in comparison.differences for s in d.sources}
+    assert files
+    assert all(f.startswith(("before/Backups", "after/Backups")) for f in files)
+
+
+def test_names_that_differ_only_in_case_are_cited_with_their_side(tmp_path: Path) -> None:
+    assert pipeline.input_names(tmp_path / "a" / "R.xml", tmp_path / "b" / "r.xml") == (
+        "before/R.xml",
+        "after/r.xml",
+    )
+    assert pipeline.input_names(tmp_path / "x.xml", tmp_path / "y.xml") == ("x.xml", "y.xml")

@@ -82,6 +82,19 @@ def _file(path: Path) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
+def input_names(before: Path, after: Path) -> tuple[str, str]:
+    """Return how reports cite each input.
+
+    Each input is cited by its file or folder name. When both have the same name (two
+    backups of one GPO in different folders, say), the names are prefixed with
+    ``before/`` and ``after/`` so every citation still says which side it came from.
+    """
+    names = display_name(before), display_name(after)
+    if names[0].casefold() != names[1].casefold():
+        return names
+    return f"before/{names[0]}", f"after/{names[1]}"
+
+
 def run(
     before: Path, after: Path, *, match: str = "guid"
 ) -> tuple[Comparison, Snapshot, list[InputFile]]:
@@ -101,11 +114,12 @@ def run(
             "compare two different versions"
         )
         raise UsageError(msg)
-    sides = [read_side(before, "before"), read_side(after, "after")]
+    names = input_names(before, after)
+    sides = [read_side(before, "before", names[0]), read_side(after, "after", names[1])]
     result = compare(sides[0], sides[1], match=match)
-    result.before, result.after = display_name(before), display_name(after)
+    result.before, result.after = names
     inputs = [
-        InputFile(display_name(path), str(side.context.get("kind", "")), size, digest)
-        for path, side, (size, digest) in zip((before, after), sides, prints, strict=True)
+        InputFile(name, str(side.context.get("kind", "")), size, digest)
+        for name, side, (size, digest) in zip(names, sides, prints, strict=True)
     ]
     return result, sides[1], inputs

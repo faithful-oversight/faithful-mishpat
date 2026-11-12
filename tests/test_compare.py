@@ -237,6 +237,36 @@ def test_blocked_inheritance() -> None:
     assert difference.subject == "corp.example/servers"  # a SOMPath, as GPO links are written
 
 
+@pytest.mark.parametrize(
+    ("whole", "kinds_seen"), [(True, ("removed", "added")), (False, ("only-before", "only-after"))]
+)
+def test_a_container_on_one_side_is_reported_when_it_blocks_inheritance(
+    *, whole: bool, kinds_seen: tuple[str, str]
+) -> None:
+    gone, new, quiet = (
+        "ou=old,dc=corp,dc=example",
+        "ou=new,dc=corp,dc=example",
+        "ou=plain,dc=corp,dc=example",
+    )
+    before = side(
+        gpo(),
+        whole=whole,
+        scopes={gone: scope(gone, blocked=True), quiet: scope(quiet)},
+    )
+    after = side(gpo(), label="after", whole=whole, scopes={new: scope(new, blocked=True)})
+    found = [
+        (d.category, d.kind, d.subject, d.before, d.after)
+        for d in compare(before, after).differences
+    ]
+    assert sorted(found, key=str) == sorted(
+        [
+            ("inheritance", kinds_seen[0], "corp.example/old", "blocked", None),
+            ("inheritance", kinds_seen[1], "corp.example/new", None, "blocked"),
+        ],
+        key=str,
+    )
+
+
 def test_scope_differences_use_the_path_form_for_each_kind_of_scope() -> None:
     domain, site = (
         "dc=corp,dc=example",

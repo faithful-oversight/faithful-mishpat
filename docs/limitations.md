@@ -68,10 +68,11 @@ A report can hold two settings with the same identity in one GPO.
 - A name must be unique on each side. A name that appears twice stops the run.
 - A GPO with a new name is not paired. It shows as a GPO in one input only.
 - Link order is compared by GUID, so it does not cover a GPO with a different GUID on each side.
+- It rarely helps across versions of a published baseline, whose GPO names usually include the version. Such GPOs are not paired and show as in one input only.
 
 ## Inputs with the same name
 
-A report names each input by its file or folder name only. If the two inputs have the same name, such as `before/gpos.jsonl` and `after/gpos.jsonl`, a problem that names only `gpos.jsonl` does not say which side it came from. Give the inputs different names.
+A report names each input by its file or folder name only. When the two inputs have the same name, compared without regard to case, such as two copies of `gpos.jsonl` in different folders, mishpat cites them as `before/gpos.jsonl` and `after/gpos.jsonl` so every citation still says which side it came from. The folders they were in are not shown.
 
 ## Paths of links
 

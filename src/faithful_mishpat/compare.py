@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from faithful_mishpat.model import (
         Gpo,
         Link,
+        Scope,
         Setting,
         Snapshot,
         Source,
@@ -381,6 +382,9 @@ def _compare_scopes(before: Snapshot, after: Snapshot, result: Comparison) -> No
         **{g.guid: g.name for g in before.gpos.values()},
         **{g.guid: g.name for g in after.gpos.values()},
     }
+    _one_sided_scopes(
+        before.scopes, after.scopes, result, whole=before.domain_wide and after.domain_wide
+    )
     for path in sorted(before.scopes.keys() & after.scopes.keys()):
         was, now = before.scopes[path], after.scopes[path]
         sources: tuple[Source, ...] = (was.source, now.source)
@@ -418,6 +422,43 @@ def _compare_scopes(before: Snapshot, after: Snapshot, result: Comparison) -> No
                     [names.get(g, g) for g in new_order],
                     sources=sources,
                     note=note,
+                )
+            )
+
+
+def _one_sided_scopes(
+    before: dict[str, Scope],
+    after: dict[str, Scope],
+    result: Comparison,
+    *,
+    whole: bool,
+) -> None:
+    """Report a container on one side only when it blocks inheritance.
+
+    Its links are already listed under each GPO, so blocked inheritance is the only fact
+    that would otherwise go unreported.
+    """
+    sides = (
+        (before, after, "removed" if whole else "only-before", "before"),
+        (after, before, "added" if whole else "only-after", "after"),
+    )
+    for scopes, other, kind, side in sides:
+        for path in sorted(scopes.keys() - other.keys()):
+            scope = scopes[path]
+            if not scope.blocked:
+                continue
+            values = ("blocked", None) if side == "before" else (None, "blocked")
+            result.differences.append(
+                Difference(
+                    "inheritance",
+                    kind,
+                    "",
+                    "",
+                    som_path(scope.path, scope.kind),
+                    values[0],
+                    values[1],
+                    sources=(scope.source,),
+                    note=f"This container is in the {side} input only, and blocks inheritance.",
                 )
             )
 

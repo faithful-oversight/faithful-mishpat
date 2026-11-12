@@ -273,7 +273,7 @@
       "subject": "Turn off Autoplay",
       "before": {
         "state": "Enabled",
-        "Turn off Autoplay on:": "All drives"
+        "Turn off Autoplay on": "All drives"
       },
       "after": null,
       "note": "",
@@ -316,15 +316,15 @@
       "subject": "Configure Automatic Updates",
       "before": {
         "state": "Enabled",
-        "Configure automatic updating:": "3 - Auto download and notify for install",
-        "Scheduled install day:": "0 - Every day",
-        "Scheduled install time:": 3
+        "Configure automatic updating": "3 - Auto download and notify for install",
+        "Scheduled install day": "0 - Every day",
+        "Scheduled install time": 3
       },
       "after": {
         "state": "Enabled",
-        "Configure automatic updating:": "4 - Auto download and schedule the install",
-        "Scheduled install day:": "0 - Every day",
-        "Scheduled install time:": 3
+        "Configure automatic updating": "4 - Auto download and schedule the install",
+        "Scheduled install day": "0 - Every day",
+        "Scheduled install time": 3
       },
       "note": "",
       "labels": {},
@@ -868,7 +868,7 @@
     "WMI filters are compared by name and description, and by query text only when the input recorded it. mishpat does not evaluate a filter.",
     "Link order, blocked inheritance and WMI query text are compared only when the input came from the mishpat exporter. Get-GPOReport files and Backup-GPO folders do not record them.",
     "Security filtering and delegation are compared as the SIDs and rights on the GPO. Group membership is not expanded, so the report does not say who is covered.",
-    "Version numbers, modified times and explanation text are shown for context but are not compared, so saving a GPO without changing a setting shows no difference.",
+    "Version numbers, modified times and policy explanation text are neither compared nor shown, so saving a GPO without changing a setting shows no difference.",
     "A difference shows what changed. It does not say whether the change is correct or approved."
   ]
 }

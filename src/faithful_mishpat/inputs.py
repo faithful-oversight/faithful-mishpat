@@ -83,12 +83,13 @@ def _read_folder(path: Path, name: str) -> Snapshot:
     )
 
 
-def read_side(path: Path, label: str) -> Snapshot:
+def read_side(path: Path, label: str, name: str | None = None) -> Snapshot:
     """Read one input into a snapshot.
 
     Args:
         path: A Get-GPOReport XML file, an export bundle, or a Backup-GPO folder or root.
         label: How reports name this side (``before`` or ``after``).
+        name: How reports cite this input; the default is :func:`display_name`.
 
     Returns:
         The snapshot, with every problem found while reading.
@@ -97,7 +98,7 @@ def read_side(path: Path, label: str) -> Snapshot:
         InputError: The path is missing, unreadable, or none of the three kinds, or it is
             ambiguous (two backups of one GPO).
     """
-    name = display_name(path)
+    name = name or display_name(path)
     if path.is_dir():
         snapshot = _read_folder(path, name)
     elif path.is_file():

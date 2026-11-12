@@ -180,7 +180,7 @@ def test_the_example_shows_each_change_it_describes() -> None:
 
     drop_down = one("setting", subject="Configure Automatic Updates")
     assert drop_down["kind"] == "changed"
-    option = "Configure automatic updating:"
+    option = "Configure automatic updating"  # the closing colon is dropped
     assert drop_down["before"][option].startswith("3 - ")
     assert drop_down["after"][option].startswith("4 - ")
     assert drop_down["before"]["state"] == drop_down["after"]["state"] == "Enabled"
@@ -267,7 +267,7 @@ def test_the_example_reads_as_a_review() -> None:
     assert "## Domain structure" in md
     assert "Scope inheritance" not in md
     assert "(not set) | (not set)" not in md
-    assert "| Configure Automatic Updates | changed | Configure automatic updating:: 3 - " in md
+    assert "| Configure Automatic Updates | changed | Configure automatic updating: 3 - " in md
     assert "Scheduled install day" not in md  # unchanged options of the policy are left out
     assert '| type: REG_SZ; data: " " |' in md.replace("REG\\_SZ", "REG_SZ")
 

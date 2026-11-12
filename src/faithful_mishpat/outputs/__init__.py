@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from faithful_mishpat.clock import date_and_time
 from faithful_mishpat.differences import CATEGORIES, KINDS
 from faithful_mishpat.errors import MishpatError
+from faithful_mishpat.formats import hidden
 from faithful_mishpat.model import SCOPES
 from faithful_mishpat.outputs.files import write_files
 from faithful_mishpat.outputs.render import (
@@ -76,8 +77,8 @@ LIMITATIONS = (
         "Group membership is not expanded, so the report does not say who is covered."
     ),
     (
-        "Version numbers, modified times and explanation text are shown for context but are not "
-        "compared, so saving a GPO without changing a setting shows no difference."
+        "Version numbers, modified times and policy explanation text are neither compared nor "
+        "shown, so saving a GPO without changing a setting shows no difference."
     ),
     "A difference shows what changed. It does not say whether the change is correct or approved.",
 )
@@ -143,6 +144,13 @@ def _context(gpo: Gpo) -> dict[str, Any]:
         "security_filtering": filtering,
         "links": links,
     }
+
+
+def _note(note: str, before: Any, after: Any) -> str:
+    if not hidden.differs_only_when_hidden(before, after):
+        return note
+    said = "A stored password changed; mishpat never shows stored passwords."
+    return f"{note} {said}" if note else said
 
 
 def _check(comparison: Comparison) -> None:
@@ -237,9 +245,9 @@ def build_report(  # noqa: PLR0913 - the documented API
                 "scope": d.scope,
                 "area": d.area,
                 "subject": d.subject,
-                "before": copy.deepcopy(d.before),
-                "after": copy.deepcopy(d.after),
-                "note": d.note,
+                "before": hidden.conceal(copy.deepcopy(d.before)),
+                "after": hidden.conceal(copy.deepcopy(d.after)),
+                "note": _note(d.note, d.before, d.after),
                 "labels": dict(d.labels),
                 "sources": [_source(s) for s in d.sources],
             }

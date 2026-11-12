@@ -24,6 +24,7 @@ First release.
 - Support for `SOURCE_DATE_EPOCH`, so the same inputs give the same report.
 - User documentation: quickstart, command reference, input formats, collecting exports, reports and output, limitations, architecture, and threat model.
 - Decision records 4 to 6: the export bundle, remote collection, and comparison rules.
+- Reports never show a Group Policy Preferences stored password (`cpassword`). A change to one is still reported, with a note.
 - Project foundation: license, documentation, contribution and security policies, continuous integration, and release pipeline.
 
 ### Changed

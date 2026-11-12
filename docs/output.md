@@ -121,7 +121,7 @@ Differences are in the order of the GPO's name, then the order of the categories
 | `security-filtering` | A trustee that is allowed to apply the GPO | `added`, `removed` | The trustee's name and SID, then `applies` or `null`. |
 | `permissions` | Every other permission entry on the GPO, which is delegation | `added`, `removed`, `changed` | The trustee, then the sorted rights. |
 | `link` | A link of a GPO, or the order of the links on a scope | `added`, `removed`, `changed` | The link target, then `enabled` and `enforced`. For order, the scope, then the GPO names in order. |
-| `inheritance` | A scope that starts or stops blocking inheritance | `changed` | The scope's distinguished name, then `blocked` or `not blocked`. |
+| `inheritance` | A scope that starts or stops blocking inheritance, or one that blocks it and is in one input only | `changed`, `added`, `removed`, `only-before`, `only-after` | The scope's path, then `blocked` or `not blocked`. |
 | `setting` | A setting in a GPO | `added`, `removed`, `changed` | The setting's title, then its value. |
 
 ### Kinds
@@ -155,7 +155,7 @@ An added or removed GPO is one difference. mishpat does not list its settings on
 
 Link order is a property of a scope, not of a GPO, so it is a separate difference under [Domain structure](#report-sections). For each scope that both inputs record, mishpat takes the GPOs that are linked there in both inputs and compares their order. A GPO linked on one side only does not count, so adding one link does not make every later link look moved. The difference is `changed`, with the GPO names in order before and after. Its subject is the scope's distinguished name followed by `: link order`.
 
-**Inheritance.** A scope that blocks inheritance on one side only gives a `changed` difference, from `not blocked` to `blocked` or back. A scope that exists in one input only is not reported.
+**Inheritance.** A scope that blocks inheritance on one side only gives a `changed` difference, from `not blocked` to `blocked` or back. A scope that exists in one input only is reported when it blocks inheritance: `added` or `removed` when both inputs are whole domains, otherwise `only-after` or `only-before`, with a note. Its links are listed under each GPO.
 
 **Settings.** Settings are paired by scope, area, kind, and key, without regard to case, and compared by value. The value is the canonical form that [Input formats](formats.md#settings) describes. A setting only the after input holds is `added`, a setting only the before input holds is `removed`, and a setting with different values is `changed`.
 
