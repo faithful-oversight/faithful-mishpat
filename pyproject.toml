@@ -151,3 +151,6 @@ exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 [tool.codespell]
 skip = "uv.lock,LICENSE,LICENSES/*,.git,.venv,.vale"
 check-hidden = true
+# SOM is the WMI filter container (CN=SOM); caf is a test prefix; collecter is a deliberate
+# misspelling in a test that checks unknown keys are refused.
+ignore-words-list = "som,caf,collecter"
