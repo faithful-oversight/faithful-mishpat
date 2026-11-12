@@ -6,8 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
+First release.
+
 ### Added
 
+- `mishpat compare`, which compares two versions of Group Policy and writes a report as JSON, Markdown, HTML, and CSV, plus a manifest with the SHA-256 of every file and both inputs.
+- Readers for `Get-GPOReport` XML, `Backup-GPO` folders, and the mishpat export bundle. The input kind is detected from content.
+- Comparison of GPO status, WMI filters, security filtering, delegation, links, blocked inheritance, link order, and settings, including Administrative Templates, `Registry.pol`, and generic extensions.
+- Explicit gaps and problems, so the report says what it could not compare and whether every input was read in full.
+- `--match name` to pair GPOs by name, and `--fail-on` to choose when `compare` exits with code 1.
+- `mishpat exporter`, which writes a read-only PowerShell script that exports GPOs, links, link order, blocked inheritance, and WMI filter queries to one export bundle.
+- `mishpat collect`, which runs the exporter on a domain controller over WinRM (the `live` extra) and supports secret references for `env`, `file`, `keyring`, `vault`, `aws`, and `azure`.
+- `mishpat schema` and the published JSON Schemas for the report and the manifest.
+- `mishpat example`, which writes a synthetic domain, `corp.example`, before and after a change.
+- Support for `SOURCE_DATE_EPOCH`, so the same inputs give the same report.
+- User documentation: quickstart, command reference, input formats, collecting exports, reports and output, limitations, architecture, and threat model.
+- Decision records 4 to 6: the export bundle, remote collection, and comparison rules.
 - Project foundation: license, documentation, contribution and security policies, continuous integration, and release pipeline.
 
 ### Changed
