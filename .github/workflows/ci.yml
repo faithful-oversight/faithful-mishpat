@@ -68,8 +68,14 @@ jobs:
         with:
           enable-cache: false
           python-version: ${{ matrix.python }}
-      - run: uv sync --locked
+      # The live extra lets the real pypsrp transport tests run. GitHub's runners
+      # include pwsh, so the collector's PowerShell tests run too. The two REQUIRE
+      # variables make those tests fail rather than skip if either is missing.
+      - run: uv sync --locked --extra live
       - run: scripts/check.sh test
+        env:
+          MISHPAT_REQUIRE_LIVE: "1"
+          MISHPAT_REQUIRE_PWSH: "1"
 
   docs:
     name: Docs, config, and workflow security

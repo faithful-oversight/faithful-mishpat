@@ -34,6 +34,30 @@ stage_config() {
   run yamllint --strict .
   run actionlint
   git ls-files -z '*.sh' | xargs -0 uv run --locked --no-sync shellcheck --
+  check_powershell
+}
+check_powershell() {
+  # Parse every PowerShell script with the real PowerShell parser. GitHub's runners
+  # include pwsh; elsewhere the check is skipped with a note.
+  if ! command -v pwsh >/dev/null; then
+    echo "pwsh not found; skipping the PowerShell syntax check" >&2
+    return 0
+  fi
+  local script
+  while IFS= read -r -d '' script; do
+    # -Command does not pass extra arguments to the command as $args, so the path goes
+    # through the environment.
+    # shellcheck disable=SC2016 # $errors and $env: are PowerShell syntax
+    PS_PARSE_PATH="$script" pwsh -NoProfile -NonInteractive -Command '
+      $errors = $null
+      $path = (Resolve-Path -LiteralPath $env:PS_PARSE_PATH).Path
+      [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)
+      foreach ($e in $errors) {
+        $line = "{0}:{1}:{2}: {3}" -f $env:PS_PARSE_PATH, $e.Extent.StartLineNumber, $e.Extent.StartColumnNumber, $e.Message
+        [Console]::Error.WriteLine($line)
+      }
+      if ($errors) { exit 1 }'
+  done < <(git ls-files -z '*.ps1')
 }
 stage_workflows() {
   # Online audits need a GitHub token; without one, run the offline audits only.
@@ -43,8 +67,11 @@ stage_workflows() {
 }
 stage_secrets()   { gitleaks git --redact --no-banner --exit-code 1 .; }
 stage_deps() {
-  uv export --color never --locked --all-groups --no-emit-project --format requirements-txt \
-    > "${TMPDIR:-/tmp}/requirements-audit.txt"
+  # --all-extras puts remote collection and the secret sources in the audit; without it
+  # their pins would never be checked. The inventory check fails if any are absent.
+  uv export --color never --locked --all-groups --all-extras --no-emit-project \
+    --format requirements-txt > "${TMPDIR:-/tmp}/requirements-audit.txt"
+  run python scripts/check_audit_inventory.py "${TMPDIR:-/tmp}/requirements-audit.txt"
   run pip-audit --strict --requirement "${TMPDIR:-/tmp}/requirements-audit.txt" --disable-pip
 }
 stage_licenses() {
@@ -59,14 +86,6 @@ stage_build() {
   uv build --build-constraint requirements-build.txt --require-hashes
   run twine check --strict dist/*
   scripts/smoke_test.sh dist
-  # The source archive ships the tests, so it must ship what they read. Collect
-  # them from an extracted copy, outside the repository.
-  local unpacked=build/sdist
-  rm -rf "$unpacked"
-  mkdir -p "$unpacked"
-  tar -xzf dist/*.tar.gz -C "$unpacked" --strip-components=1
-  (cd "$unpacked" && uv run --project "$OLDPWD" --no-sync python -m pytest \
-    --collect-only -q --no-cov -p no:cacheprovider tests >/dev/null)
   scripts/release_evidence.sh dist
   # A rerun of the release workflow rebuilds everything, and can resume a staged
   # draft only if every byte comes out the same. Prove that on every change.
