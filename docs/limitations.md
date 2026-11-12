@@ -101,7 +101,7 @@ mishpat refuses or reports as a problem:
 
 ## Exporter and collection
 
-- **They have not been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1.** This is a known limitation of this release. See [How far this release has been tested](#how-far-this-release-has-been-tested). Treat the first runs in your environment as a pilot, and report anything unexpected.
+- **They have not been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1.** This is a known limitation of this release. See [How far this release has been tested](#how-far-this-release-has-been-tested). Treat the first runs in your environment as a pilot, and report anything unexpected. On a domain-joined lab computer with RSAT, `MISHPAT_LAB_DOMAIN=1` runs the test that exports the whole lab domain with the real script; CI does not run it.
 - **Rights.** The rights the exporter needs are those Microsoft documents for `Backup-GPO`, for reading the directory, and for PowerShell remoting. mishpat has not tested whether a just-enough-administration endpoint can be narrowed further for the script.
 - **One export is one controller at one time.** See [What the exports cannot show](#what-the-exports-cannot-show).
 - **A compromised controller can lie.** The end line of a bundle shows that the file arrived whole. It does not show that the controller told the truth. See the [threat model](threat-model.md).

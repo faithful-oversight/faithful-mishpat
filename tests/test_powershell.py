@@ -808,9 +808,16 @@ def test_the_real_script_refuses_bad_parameters_before_touching_anything(
     assert place.leftovers() == []
 
 
-@pytest.mark.skipif(sys.platform != "win32" or _PWSH is None, reason="needs Windows and RSAT")
+@pytest.mark.skipif(
+    sys.platform != "win32" or _PWSH is None or os.environ.get("MISHPAT_LAB_DOMAIN") != "1",
+    reason="run by hand on a domain-joined computer with RSAT: set MISHPAT_LAB_DOMAIN=1",
+)
 def test_the_real_script_exports_a_real_gpo(place: Place) -> None:  # pragma: no cover
-    """Run by hand on a domain-joined computer: ``-All`` against a lab domain."""
+    """Run by hand on a domain-joined computer: ``-All`` against a lab domain.
+
+    It needs RSAT and a domain, which CI runners do not have, so it runs only when
+    ``MISHPAT_LAB_DOMAIN=1`` says the computer is ready. Never point it at production.
+    """
     result = run_script(place, "-All", "-OutFile", str(place.out / "real.jsonl"))
     assert result.returncode == 0, result.stderr
     bundle = Bundle((place.out / "real.jsonl").read_bytes())
