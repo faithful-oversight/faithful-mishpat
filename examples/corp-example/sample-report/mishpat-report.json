@@ -1,0 +1,879 @@
+{
+  "$schema": "https://faithful-oversight.github.io/faithful-mishpat/schema/report-v1.schema.json",
+  "schema_version": "1.0",
+  "tool": {
+    "name": "mishpat",
+    "version": "0.0.0"
+  },
+  "generated_at": "2026-11-09T12:00:00Z",
+  "inputs": [
+    {
+      "name": "corp-before.jsonl",
+      "kind": "export",
+      "size": 83586,
+      "sha256": "82d77f942c418094510310d7e9bcff075051b558701a35e55b89496d454ea842"
+    },
+    {
+      "name": "corp-after.jsonl",
+      "kind": "export",
+      "size": 84608,
+      "sha256": "d0da271e200b96b3fe95ef5b1dfaf60085be5c58484fb14b0f0e210d0092079f"
+    }
+  ],
+  "options": {
+    "fail_on": "differences",
+    "match": "guid"
+  },
+  "comparison": {
+    "before": "before",
+    "after": "after",
+    "match": "guid",
+    "complete": true
+  },
+  "summary": {
+    "complete": true,
+    "differences": 27,
+    "gpos_compared": 6,
+    "gpos_changed": 5,
+    "scope_differences": 2,
+    "problems": 0,
+    "gaps": 0,
+    "notices": 0,
+    "by_category": {
+      "gpo": 3,
+      "status": 1,
+      "wmi-filter": 1,
+      "security-filtering": 1,
+      "permissions": 1,
+      "link": 4,
+      "inheritance": 1,
+      "setting": 15
+    },
+    "by_kind": {
+      "added": 8,
+      "removed": 6,
+      "changed": 12,
+      "renamed": 1
+    },
+    "by_status": {
+      "changed": 3,
+      "unchanged": 1,
+      "added": 1,
+      "removed": 1
+    }
+  },
+  "notices": [],
+  "gpos": [
+    {
+      "guid": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "before_guid": "",
+      "name": "Baseline - Servers",
+      "status": "changed",
+      "differences": 12,
+      "context": {
+        "computer_enabled": true,
+        "user_enabled": true,
+        "wmi_filter": {
+          "name": "Member servers",
+          "description": "Windows Server member servers",
+          "identifier": "b6f2a1d4-5c37-4e80-9d12-7a4e3c8b0f56",
+          "query": "1;3;10;86;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE BuildNumber >= \"20348\" AND ProductType = \"3\";"
+        },
+        "security_filtering": [
+          {
+            "sid": "S-1-5-11",
+            "name": "NT AUTHORITY\\Authenticated Users"
+          }
+        ],
+        "links": [
+          {
+            "target": "corp.example/Servers",
+            "enabled": true,
+            "enforced": false,
+            "order": 1
+          },
+          {
+            "target": "corp.example/Servers/Web",
+            "enabled": true,
+            "enforced": false,
+            "order": 1
+          }
+        ]
+      }
+    },
+    {
+      "guid": "4e0b7d1a-93c2-4f68-a1d5-2c7e9b3f6a10",
+      "before_guid": "",
+      "name": "Default Domain Policy",
+      "status": "unchanged",
+      "differences": 0,
+      "context": null
+    },
+    {
+      "guid": "73d0c6e8-b2a9-4f15-96c4-8e1b5a7d3f29",
+      "before_guid": "",
+      "name": "Edge Browser Policy",
+      "status": "added",
+      "differences": 1,
+      "context": {
+        "computer_enabled": true,
+        "user_enabled": true,
+        "wmi_filter": "none",
+        "security_filtering": [
+          {
+            "sid": "S-1-5-11",
+            "name": "NT AUTHORITY\\Authenticated Users"
+          }
+        ],
+        "links": [
+          {
+            "target": "corp.example/Workstations",
+            "enabled": true,
+            "enforced": false,
+            "order": 3
+          }
+        ]
+      }
+    },
+    {
+      "guid": "e5b94a20-7c16-43d8-85f1-0a6c3d2e9b87",
+      "before_guid": "",
+      "name": "Legacy Kiosk Lockdown",
+      "status": "removed",
+      "differences": 1,
+      "context": null
+    },
+    {
+      "guid": "2f6d8b94-1e57-4c03-b8a6-d9c0e7a31f45",
+      "before_guid": "",
+      "name": "Staff Desktop Settings",
+      "status": "changed",
+      "differences": 3,
+      "context": {
+        "computer_enabled": false,
+        "user_enabled": true,
+        "wmi_filter": "none",
+        "security_filtering": [
+          {
+            "sid": "S-1-5-11",
+            "name": "NT AUTHORITY\\Authenticated Users"
+          }
+        ],
+        "links": [
+          {
+            "target": "corp.example/Workstations",
+            "enabled": false,
+            "enforced": false,
+            "order": 1
+          }
+        ]
+      }
+    },
+    {
+      "guid": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "before_guid": "",
+      "name": "Workstation Hardening",
+      "status": "changed",
+      "differences": 8,
+      "context": {
+        "computer_enabled": true,
+        "user_enabled": true,
+        "wmi_filter": {
+          "name": "Windows clients",
+          "description": "Windows 10 and Windows 11 computers",
+          "identifier": "1d9e4b7a-8f25-4c63-a0b1-6e2d5f379c48",
+          "query": "1;3;10;83;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE \"10.%\" AND ProductType = \"1\";"
+        },
+        "security_filtering": [
+          {
+            "sid": "S-1-5-21-1000-2000-3000-1301",
+            "name": "CORP\\Pilot Workstations"
+          },
+          {
+            "sid": "S-1-5-11",
+            "name": "NT AUTHORITY\\Authenticated Users"
+          }
+        ],
+        "links": [
+          {
+            "target": "corp.example/Workstations",
+            "enabled": true,
+            "enforced": true,
+            "order": 2
+          }
+        ]
+      }
+    }
+  ],
+  "differences": [
+    {
+      "category": "wmi-filter",
+      "kind": "changed",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "",
+      "area": "",
+      "subject": "WMI filter",
+      "before": {
+        "name": "Member servers",
+        "description": "Windows Server member servers",
+        "query": "1;3;10;83;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE \"10.%\" AND ProductType = \"3\";"
+      },
+      "after": {
+        "name": "Member servers",
+        "description": "Windows Server member servers",
+        "query": "1;3;10;86;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE BuildNumber >= \"20348\" AND ProductType = \"3\";"
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "link",
+      "kind": "added",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "",
+      "area": "",
+      "subject": "corp.example/Servers/Web",
+      "before": null,
+      "after": {
+        "enabled": true,
+        "enforced": false
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "removed",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Administrative Templates",
+      "subject": "Turn off Autoplay",
+      "before": {
+        "state": "Enabled",
+        "elements": [
+          {
+            "kind": "DropDownList",
+            "name": "Turn off Autoplay on:",
+            "state": "Enabled",
+            "value": "All drives"
+          }
+        ]
+      },
+      "after": null,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
+          "detail": "Computer/Registry/Policy[Turn off Autoplay]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "added",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Administrative Templates",
+      "subject": "Disable Windows Error Reporting",
+      "before": null,
+      "after": {
+        "state": "Enabled",
+        "elements": []
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
+          "detail": "Computer/Registry/Policy[Disable Windows Error Reporting]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "changed",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Administrative Templates",
+      "subject": "Configure Automatic Updates",
+      "before": {
+        "state": "Enabled",
+        "elements": [
+          {
+            "kind": "DropDownList",
+            "name": "Configure automatic updating:",
+            "state": "Enabled",
+            "value": "3 - Auto download and notify for install"
+          },
+          {
+            "kind": "DropDownList",
+            "name": "Scheduled install day:",
+            "state": "Enabled",
+            "value": "0 - Every day"
+          },
+          {
+            "kind": "Numeric",
+            "name": "Scheduled install time:",
+            "state": "Enabled",
+            "value": 3
+          }
+        ]
+      },
+      "after": {
+        "state": "Enabled",
+        "elements": [
+          {
+            "kind": "DropDownList",
+            "name": "Configure automatic updating:",
+            "state": "Enabled",
+            "value": "4 - Auto download and schedule the install"
+          },
+          {
+            "kind": "DropDownList",
+            "name": "Scheduled install day:",
+            "state": "Enabled",
+            "value": "0 - Every day"
+          },
+          {
+            "kind": "Numeric",
+            "name": "Scheduled install time:",
+            "state": "Enabled",
+            "value": 3
+          }
+        ]
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
+          "detail": "Computer/Registry/Policy[Configure Automatic Updates]"
+        },
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
+          "detail": "Computer/Registry/Policy[Configure Automatic Updates]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "changed",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Advanced Audit",
+      "subject": "Audit Logon",
+      "before": 1,
+      "after": 3,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
+          "detail": "Computer/Auditing/AuditSetting[Audit Logon]"
+        },
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
+          "detail": "Computer/Auditing/AuditSetting[Audit Logon]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "removed",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Advanced Audit",
+      "subject": "Audit File Share",
+      "before": 3,
+      "after": null,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
+          "detail": "Computer/Auditing/AuditSetting[Audit File Share]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "added",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Advanced Audit",
+      "subject": "Audit Process Creation",
+      "before": null,
+      "after": 1,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
+          "detail": "Computer/Auditing/AuditSetting[Audit Process Creation]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "added",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Registry.pol",
+      "subject": "Software\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU\\**del.UseWUServer",
+      "before": null,
+      "after": {
+        "type": "REG_SZ",
+        "data": " "
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/DomainSysvol/GPO/Machine/registry.pol",
+          "detail": "entry 7"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "removed",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Registry.pol",
+      "subject": "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\NoDriveTypeAutoRun",
+      "before": {
+        "type": "REG_DWORD",
+        "data": 255
+      },
+      "after": null,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/DomainSysvol/GPO/Machine/registry.pol",
+          "detail": "entry 6"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "added",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Registry.pol",
+      "subject": "Software\\Policies\\Microsoft\\Windows\\Windows Error Reporting\\Disabled",
+      "before": null,
+      "after": {
+        "type": "REG_DWORD",
+        "data": 1
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/DomainSysvol/GPO/Machine/registry.pol",
+          "detail": "entry 6"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "changed",
+      "gpo": "9c3e51b7-2d84-4a6f-8e10-b5f7a2c4d963",
+      "gpo_name": "Baseline - Servers",
+      "scope": "Computer",
+      "area": "Registry.pol",
+      "subject": "Software\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU\\AUOptions",
+      "before": {
+        "type": "REG_DWORD",
+        "data": 3
+      },
+      "after": {
+        "type": "REG_DWORD",
+        "data": 4
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/DomainSysvol/GPO/Machine/registry.pol",
+          "detail": "entry 2"
+        },
+        {
+          "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/DomainSysvol/GPO/Machine/registry.pol",
+          "detail": "entry 2"
+        }
+      ]
+    },
+    {
+      "category": "gpo",
+      "kind": "added",
+      "gpo": "73d0c6e8-b2a9-4f15-96c4-8e1b5a7d3f29",
+      "gpo_name": "Edge Browser Policy",
+      "scope": "",
+      "area": "",
+      "subject": "Edge Browser Policy",
+      "before": null,
+      "after": null,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-after.jsonl:{9F05E6C2-D3A8-4B71-8E24-1C7B4A0D6E93}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "gpo",
+      "kind": "removed",
+      "gpo": "e5b94a20-7c16-43d8-85f1-0a6c3d2e9b87",
+      "gpo_name": "Legacy Kiosk Lockdown",
+      "scope": "",
+      "area": "",
+      "subject": "Legacy Kiosk Lockdown",
+      "before": null,
+      "after": null,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{1B7F4E90-A6D3-4C58-9E02-D8C3B5F7A164}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "status",
+      "kind": "changed",
+      "gpo": "2f6d8b94-1e57-4c03-b8a6-d9c0e7a31f45",
+      "gpo_name": "Staff Desktop Settings",
+      "scope": "",
+      "area": "",
+      "subject": "computer half",
+      "before": "enabled",
+      "after": "disabled",
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{58C0D3B7-E4A1-4296-B7F8-2A9E5D1C6403}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{D41B7E03-6A92-4C8F-B150-9E3A2D7C5F08}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "permissions",
+      "kind": "removed",
+      "gpo": "2f6d8b94-1e57-4c03-b8a6-d9c0e7a31f45",
+      "gpo_name": "Staff Desktop Settings",
+      "scope": "",
+      "area": "",
+      "subject": "CORP\\Helpdesk Operators (S-1-5-21-1000-2000-3000-1204)",
+      "before": [
+        "Read"
+      ],
+      "after": null,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{58C0D3B7-E4A1-4296-B7F8-2A9E5D1C6403}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{D41B7E03-6A92-4C8F-B150-9E3A2D7C5F08}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "link",
+      "kind": "changed",
+      "gpo": "2f6d8b94-1e57-4c03-b8a6-d9c0e7a31f45",
+      "gpo_name": "Staff Desktop Settings",
+      "scope": "",
+      "area": "",
+      "subject": "corp.example/Workstations",
+      "before": {
+        "enabled": true,
+        "enforced": false
+      },
+      "after": {
+        "enabled": false,
+        "enforced": false
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{58C0D3B7-E4A1-4296-B7F8-2A9E5D1C6403}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{D41B7E03-6A92-4C8F-B150-9E3A2D7C5F08}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "gpo",
+      "kind": "renamed",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "",
+      "area": "",
+      "subject": "name",
+      "before": "Workstation Baseline",
+      "after": "Workstation Hardening",
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "security-filtering",
+      "kind": "added",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "",
+      "area": "",
+      "subject": "CORP\\Pilot Workstations (S-1-5-21-1000-2000-3000-1301)",
+      "before": null,
+      "after": "applies",
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "link",
+      "kind": "changed",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "",
+      "area": "",
+      "subject": "corp.example/Workstations",
+      "before": {
+        "enabled": true,
+        "enforced": false
+      },
+      "after": {
+        "enabled": true,
+        "enforced": true
+      },
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
+          "detail": ""
+        },
+        {
+          "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "changed",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "Computer",
+      "area": "Security",
+      "subject": "LockoutBadCount",
+      "before": 10,
+      "after": 5,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
+          "detail": "Computer/Security/Account[LockoutBadCount]"
+        },
+        {
+          "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
+          "detail": "Computer/Security/Account[LockoutBadCount]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "added",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "Computer",
+      "area": "Security",
+      "subject": "Interactive logon: Machine inactivity limit",
+      "before": null,
+      "after": 900,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
+          "detail": "Computer/Security/SecurityOptions[Interactive logon: Machine inactivity limit]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "changed",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "Computer",
+      "area": "Security",
+      "subject": "Network security: LAN Manager authentication level",
+      "before": 3,
+      "after": 5,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
+          "detail": "Computer/Security/SecurityOptions[Network security: LAN Manager authentication level]"
+        },
+        {
+          "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
+          "detail": "Computer/Security/SecurityOptions[Network security: LAN Manager authentication level]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "removed",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "Computer",
+      "area": "Security",
+      "subject": "Network access: Restrict anonymous access",
+      "before": 1,
+      "after": null,
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
+          "detail": "Computer/Security/SecurityOptions[Network access: Restrict anonymous access]"
+        }
+      ]
+    },
+    {
+      "category": "setting",
+      "kind": "changed",
+      "gpo": "c71a0e5f-68b3-4d29-9a47-3e8d1f5b0c72",
+      "gpo_name": "Workstation Hardening",
+      "scope": "Computer",
+      "area": "Security",
+      "subject": "SeDenyNetworkLogonRight",
+      "before": [
+        "S-1-5-32-546"
+      ],
+      "after": [
+        "S-1-5-113",
+        "S-1-5-32-546"
+      ],
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
+          "detail": "Computer/Security/UserRightsAssignment[SeDenyNetworkLogonRight]"
+        },
+        {
+          "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
+          "detail": "Computer/Security/UserRightsAssignment[SeDenyNetworkLogonRight]"
+        }
+      ]
+    },
+    {
+      "category": "inheritance",
+      "kind": "changed",
+      "gpo": "",
+      "gpo_name": "",
+      "scope": "",
+      "area": "",
+      "subject": "OU=Web,OU=Servers,DC=corp,DC=example",
+      "before": "not blocked",
+      "after": "blocked",
+      "note": "",
+      "sources": [
+        {
+          "file": "corp-before.jsonl",
+          "detail": "structure scope 3"
+        },
+        {
+          "file": "corp-after.jsonl",
+          "detail": "structure scope 3"
+        }
+      ]
+    },
+    {
+      "category": "link",
+      "kind": "changed",
+      "gpo": "",
+      "gpo_name": "",
+      "scope": "",
+      "area": "",
+      "subject": "OU=Workstations,DC=corp,DC=example: link order",
+      "before": [
+        "Workstation Hardening",
+        "Staff Desktop Settings"
+      ],
+      "after": [
+        "Staff Desktop Settings",
+        "Workstation Hardening"
+      ],
+      "note": "Order among the GPOs linked here on both sides; added or removed links are listed under each GPO.",
+      "sources": [
+        {
+          "file": "corp-before.jsonl",
+          "detail": "structure scope 4"
+        },
+        {
+          "file": "corp-after.jsonl",
+          "detail": "structure scope 4"
+        }
+      ]
+    }
+  ],
+  "gaps": [],
+  "problems": [],
+  "limitations": [
+    "mishpat compares what the inputs record. It cannot show the effective settings on a computer or for a user, which depend on every GPO that applies, their order, loopback processing, and the computer's site.",
+    "Item-level targeting in Group Policy Preferences is compared as written. mishpat does not evaluate whether an item applies to a computer or user.",
+    "WMI filters are compared by name and description, and by query text only when the input recorded it. mishpat does not evaluate a filter.",
+    "Link order, blocked inheritance and WMI query text are compared only when the input came from the mishpat exporter. Get-GPOReport files and Backup-GPO folders do not record them.",
+    "Security filtering and delegation are compared as the SIDs and rights on the GPO. Group membership is not expanded, so the report does not say who is covered.",
+    "Version numbers, modified times and explanation text are shown for context but are not compared, so saving a GPO without changing a setting shows no difference.",
+    "A difference shows what changed. It does not say whether the change is correct or approved."
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://faithful-oversight.github.io/faithful-mishpat/schema/manifest-v1.schema.json",
+  "schema_version": "1.0",
+  "tool": {
+    "name": "mishpat",
+    "version": "0.0.0"
+  },
+  "generated_at": "2026-11-09T12:00:00Z",
+  "files": [
+    {
+      "name": "mishpat-report.json",
+      "size": 25510,
+      "sha256": "9c4fd562ce30ca1a29fa890c48f0fea247425f5defacdfdcabf62f7d45d59dbf"
+    },
+    {
+      "name": "mishpat-report.md",
+      "size": 13463,
+      "sha256": "c189b28e71f897db1feba9694a420aa9f7da9e44f2ed619265689982abeb4c10"
+    },
+    {
+      "name": "mishpat-report.html",
+      "size": 24514,
+      "sha256": "3729f7cf3e7bcc058c212786aa841f7a5f040bec0c02451687168bfa5f9866f0"
+    },
+    {
+      "name": "mishpat-differences.csv",
+      "size": 9669,
+      "sha256": "9c169a18035bd38013d2386033c992a246b754fb56c25f20dac5d379723cb75b"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "corp-before.jsonl",
+      "size": 83586,
+      "sha256": "82d77f942c418094510310d7e9bcff075051b558701a35e55b89496d454ea842"
+    },
+    {
+      "name": "corp-after.jsonl",
+      "size": 84608,
+      "sha256": "d0da271e200b96b3fe95ef5b1dfaf60085be5c58484fb14b0f0e210d0092079f"
+    }
+  ]
+}
