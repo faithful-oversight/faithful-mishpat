@@ -24,9 +24,9 @@ First release.
 - Support for `SOURCE_DATE_EPOCH`, so the same inputs give the same report.
 - User documentation: quickstart, command reference, input formats, collecting exports, reports and output, limitations, architecture, and threat model.
 - Decision records 4 to 6: the export bundle, remote collection, and comparison rules.
-- Reports never show a Group Policy Preferences stored password (`cpassword`), as an attribute or an element. A change to one is still reported, with a note, even beside other changes to the item.
+- Reports never show a Group Policy Preferences stored password (`cpassword`), as an attribute or an element of any shape, and a change anywhere in its content is found. A change to one is still reported, with a note, even beside other changes to the item.
 - Links and special files in a backup folder are listed as problems rather than silently skipped, and a named pipe given as an input is refused rather than read.
-- A setting is reported as added or removed only when its source was read on both sides. A missing or unusable report, a missing Computer or User section, or an unreadable `Registry.pol` gives a gap and a problem instead.
+- A setting is reported as added or removed only when its source was read on both sides. A missing or unusable report, a missing Computer or User section, a half with a setting skipped as malformed, or an unreadable `Registry.pol` gives a gap and a problem instead.
 - Names in a backup or bundle that differ only in case, and WMI filters recorded twice with different queries, are reported as problems instead of one being chosen.
 - Attributes in an XML namespace are compared by namespace URI.
 - Malformed numbers, non-ASCII base64, and folders that cannot be listed are input problems, never internal errors.

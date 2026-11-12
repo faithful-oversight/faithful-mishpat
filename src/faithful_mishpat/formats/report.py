@@ -185,6 +185,27 @@ def _json(value: ValueData) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
+def _whole_content(element: ET.Element) -> list[object]:
+    """Everything an element holds: names, attributes, text, children and the text after each."""
+    return [
+        element.tag,
+        sorted((k, v) for k, v in element.attrib.items() if not k.startswith(_XSI_PREFIX)),
+        _clean(element.text),
+        [[_whole_content(child), _clean(child.tail)] for child in element],
+    ]
+
+
+def _hidden_element(element: ET.Element) -> str:
+    """Stand in for a stored-password element, of any shape, by a fingerprint of all of it.
+
+    The fingerprint covers attributes, children and mixed text, so any change to what is
+    stored is found. An element that holds nothing is ``""``, an empty password.
+    """
+    if not element.attrib and not len(element) and not _clean(element.text):
+        return ""
+    return hidden.hide(json.dumps(_whole_content(element), ensure_ascii=False))
+
+
 def canonical(
     element: ET.Element,
     *,
@@ -204,6 +225,8 @@ def canonical(
     """
     if element.get(_XSI_NIL) == "true":
         return None
+    if hidden.is_hidden_name(_local(element)):
+        return _hidden_element(element)
     text = _clean(element.text)
     attributes = {
         k: v for k, v in element.attrib.items() if not k.startswith(_XSI_PREFIX) and k not in drop
@@ -213,8 +236,6 @@ def canonical(
         name = _local(child)
         if name not in _IGNORED:
             item = canonical(child, drop=drop, sort=sort)
-            if hidden.is_hidden_name(name) and item is not None:
-                item = hidden.hide(item if isinstance(item, str) else _json(item))
             children.setdefault(name, []).append(item)
     if not attributes and not children:
         return text
@@ -948,9 +969,12 @@ def _gpo(element: ET.Element, base: Source, problems: list[Problem]) -> Gpo:
                 )
             )
             continue
-        gpo.context[evidence_key(scope_name)] = "read"
         scope = _Scope(scope_name, base, problems)
+        before = len(problems)
         _read_half(scope, half)
+        # A setting skipped as malformed is not known to be absent, so a half with any
+        # skip is "partial": its one-sided settings are not called added or removed.
+        gpo.context[evidence_key(scope_name)] = "read" if len(problems) == before else "partial"
         gpo.settings.extend(scope.settings)
     gpo.settings = _dedupe(gpo.settings)
     return gpo

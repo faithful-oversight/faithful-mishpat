@@ -358,3 +358,101 @@ def test_a_folder_that_cannot_be_listed_is_a_problem(
     report = json.loads((tmp_path / "o" / "mishpat-report.json").read_text("utf-8"))
     assert report["comparison"]["complete"] is False
     assert any("Permission denied" in p["reason"] for p in report["problems"])
+
+
+# --- second recheck: R1 a password element dispatched as the root of a setting ---------
+
+
+def _pair(tmp_path: Path, before: str, after: str) -> tuple[dict[str, Any], str]:
+    (tmp_path / "a.xml").write_bytes(report_bytes(gpo_xml(computer=extension("Misc", before))))
+    (tmp_path / "b.xml").write_bytes(report_bytes(gpo_xml(computer=extension("Misc", after))))
+    _, report, texts = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
+    return report, texts
+
+
+def test_a_password_element_that_is_a_setting_itself_never_leaks(tmp_path: Path) -> None:
+    def body(secret: str) -> str:
+        return f'<q1:cpassword encoding="opaque">{secret}</q1:cpassword>'
+
+    report, texts = _pair(tmp_path, body(PROBE + "-A"), body(PROBE + "-B"))
+    assert PROBE not in texts
+    assert "mishpat-hidden" not in texts
+    assert [(d["category"], d["kind"]) for d in report["differences"]] == [("setting", "changed")]
+    assert "A stored password changed" in report["differences"][0]["note"]
+
+
+# --- R3: every part of a mixed-content password counts ------------------------------------
+
+
+def _mixed(secret: str, name: str = "Same") -> str:
+    return (
+        f"<q1:Widget><q1:Name>{name}</q1:Name><q1:Properties>"
+        f"<q1:cpassword>start<q1:part/>{secret}</q1:cpassword>"
+        "</q1:Properties></q1:Widget>"
+    )
+
+
+def test_a_change_in_the_text_after_a_child_of_a_password_is_found(tmp_path: Path) -> None:
+    report, texts = _pair(tmp_path, _mixed(PROBE + "-A"), _mixed(PROBE + "-B"))
+    assert PROBE not in texts
+    assert [(d["category"], d["kind"]) for d in report["differences"]] == [("setting", "changed")]
+    assert "A stored password changed" in report["differences"][0]["note"]
+
+
+def test_the_same_mixed_content_password_is_no_change(tmp_path: Path) -> None:
+    # Only the GPO name differs, so the inputs are distinct but the setting is equal.
+    (tmp_path / "a.xml").write_bytes(
+        report_bytes(gpo_xml(computer=extension("Misc", _mixed(PROBE))))
+    )
+    (tmp_path / "b.xml").write_bytes(
+        report_bytes(gpo_xml(name="Servers baseline 2", computer=extension("Misc", _mixed(PROBE))))
+    )
+    _, report, texts = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
+    assert PROBE not in texts
+    assert [d for d in report["differences"] if d["category"] == "setting"] == []
+
+
+# --- R2: a setting skipped as malformed is not known to be absent ------------------------
+
+VALID = policy("Critical setting")
+DAMAGED = VALID.replace("<q1:Name>Critical setting</q1:Name>", "")
+
+
+@pytest.mark.parametrize(("before", "after"), [(VALID, DAMAGED), (DAMAGED, VALID)])
+def test_a_skipped_setting_is_neither_added_nor_removed(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    assert DAMAGED != VALID
+    (tmp_path / "a.xml").write_bytes(report_bytes(gpo_xml(computer=registry_ext(before))))
+    (tmp_path / "b.xml").write_bytes(report_bytes(gpo_xml(computer=registry_ext(after))))
+    _, report, texts = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
+    assert [d for d in report["differences"] if d["category"] == "setting"] == []
+    assert report["comparison"]["complete"] is False
+    assert any("Computer settings in one input only" in g["subject"] for g in report["gaps"])
+    assert "Critical setting" not in [d["subject"] for d in report["differences"]]
+    assert "has no Name" in texts
+
+
+def test_a_skip_in_one_half_leaves_the_other_half_and_registry_pol_compared(
+    tmp_path: Path,
+) -> None:
+    other = registry_ext(policy("User setting"))
+    before = backup(
+        tmp_path / "before",
+        report=report_bytes(gpo_xml(computer=registry_ext(VALID), user=other)),
+        machine_pol=registry_pol(POL),
+    )
+    after = backup(
+        tmp_path / "after",
+        report=report_bytes(gpo_xml(computer=registry_ext(DAMAGED))),
+    )
+    _, report, _ = run(tmp_path, before, after)
+    removed = [(d["scope"], d["subject"]) for d in report["differences"] if d["kind"] == "removed"]
+    assert ("User", "User setting") in removed  # the undamaged half still compares
+    assert any(
+        d["area"] == "Registry.pol" and d["kind"] == "removed" for d in report["differences"]
+    )
+    assert not any(
+        d["scope"] == "Computer" and d["area"] != "Registry.pol" and d["kind"] == "removed"
+        for d in report["differences"]
+    )

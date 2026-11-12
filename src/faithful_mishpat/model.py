@@ -239,7 +239,8 @@ def evidence_key(scope: str, *, raw: bool = False) -> str:
 
     Readers set ``evidence:computer settings`` and ``evidence:user settings`` for the
     settings in a report, and ``evidence:computer registry.pol`` and ``evidence:user
-    registry.pol`` for Registry.pol values, to ``read`` or ``unreadable``. A setting in
+    registry.pol`` for Registry.pol values, to ``read``, ``partial`` (read, but something in
+    it was skipped) or ``unreadable``. A setting in
     one input only is a difference only when its source was read on both sides; a GPO
     with no such key (one built by hand) counts as read.
     """
