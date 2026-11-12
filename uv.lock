@@ -765,6 +765,7 @@ dev = [
     { name = "cyclonedx-bom" },
     { name = "furo" },
     { name = "hypothesis" },
+    { name = "jsonschema" },
     { name = "mypy" },
     { name = "myst-parser" },
     { name = "pip-audit" },
@@ -779,6 +780,7 @@ dev = [
     { name = "sphinx", version = "9.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.12.*'" },
     { name = "sphinx", version = "9.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "twine" },
+    { name = "types-jsonschema" },
     { name = "vale" },
     { name = "yamllint" },
     { name = "zizmor" },
@@ -793,6 +795,7 @@ dev = [
     { name = "cyclonedx-bom", specifier = ">=7" },
     { name = "furo", specifier = ">=2025.12.19" },
     { name = "hypothesis", specifier = ">=6.100" },
+    { name = "jsonschema", specifier = ">=4.23" },
     { name = "mypy", specifier = ">=1.15" },
     { name = "myst-parser", specifier = ">=5" },
     { name = "pip-audit", specifier = ">=2.9" },
@@ -805,6 +808,7 @@ dev = [
     { name = "shellcheck-py", specifier = ">=0.10" },
     { name = "sphinx", specifier = ">=9" },
     { name = "twine", specifier = ">=6" },
+    { name = "types-jsonschema", specifier = ">=4.23" },
     { name = "vale", specifier = ">=3.9" },
     { name = "yamllint", specifier = ">=1.37" },
     { name = "zizmor", specifier = ">=1.14" },
@@ -2905,6 +2909,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/92/3c/58f808a359700f39a967dffede33efeac809262c03303fa3eec6afff8f49/twine-7.0.0.tar.gz", hash = "sha256:85cdb29c518efef867360ae4acd4b0dfd61c8654a22fca08e6f8539f05022177", size = 215032, upload-time = "2026-07-27T15:59:00.825Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/96/08/ddcdc06225eaad6de0e48e1002b06d919dbde20582d0662c7af51308e5d6/twine-7.0.0-py3-none-any.whl", hash = "sha256:b854164df26db268af05f49aa5c0344b10e27a494343ff05b1e0bad3b135f5a7", size = 43204, upload-time = "2026-07-27T15:58:59.26Z" },
+]
+
+[[package]]
+name = "types-jsonschema"
+version = "4.26.0.20261006"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "referencing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/29/d2/1f742605f5a6d39f993134885b8de41c98af606871d3ebddaf3e776bd1eb/types_jsonschema-4.26.0.20261006.tar.gz", hash = "sha256:3eb7db61b6819d40addfdaac7173e749071a7d4a9a4394f0c844598ec84b2500", size = 16843, upload-time = "2026-10-06T08:16:07.318Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/a0/4f2e3c0dc3d5cad958006f2e0307065cc8fe4fbf0393ff0b69d55ee9bbe5/types_jsonschema-4.26.0.20261006-py3-none-any.whl", hash = "sha256:29301f4e65e3928540cdf5e23ad716e38bb0c0b416a48dada213edd3d70206ec", size = 16113, upload-time = "2026-10-06T08:16:06.355Z" },
 ]
 
 [[package]]
