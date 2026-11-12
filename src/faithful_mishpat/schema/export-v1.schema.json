@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faithful-oversight.github.io/faithful-mishpat/schema/export-v1.schema.json",
+  "title": "mishpat export bundle line",
+  "description": "Version 1 of one line of the mishpat export bundle, a JSON Lines file written by the mishpat exporter. The first line is the header and begins with the bytes {\"mishpat_export\": (compact JSON, that key first). Then come file lines (one per file of a Backup-GPO folder), one structure line, and the end line, which states the number of file lines and the SHA-256 of every byte before the end line. Nothing follows the end line. Lines are UTF-8 JSON objects with no repeated names and no more than eight levels of nesting. Each line must match exactly one of the definitions below. The reader also checks what a schema cannot: each path is unique when compared without regard to case and is not inside another file, a file's size and sha256 match its decoded data, and the end line's count and hash match the file.",
+  "oneOf": [
+    { "$ref": "#/$defs/header" },
+    { "$ref": "#/$defs/file" },
+    { "$ref": "#/$defs/structureLine" },
+    { "$ref": "#/$defs/end" }
+  ],
+  "$defs": {
+    "guid": {
+      "type": "string",
+      "description": "A GUID, with or without braces, in any case.",
+      "pattern": "^\\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "header": {
+      "type": "object",
+      "description": "The first line.",
+      "additionalProperties": false,
+      "required": ["mishpat_export", "collector", "domain", "collected_at", "scope"],
+      "properties": {
+        "mishpat_export": {
+          "const": 1,
+          "description": "The bundle format version."
+        },
+        "collector": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "version": { "type": "string", "minLength": 1, "maxLength": 255 }
+          }
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The DNS name of the domain the bundle was collected from."
+        },
+        "collected_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,7})?Z$",
+          "description": "When the collection ran, in UTC."
+        },
+        "scope": {
+          "description": "\"all\" when every GPO of the domain was collected, otherwise the GUIDs that were asked for.",
+          "oneOf": [
+            { "const": "all" },
+            {
+              "type": "array",
+              "maxItems": 100000,
+              "items": { "$ref": "#/$defs/guid" }
+            }
+          ]
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "description": "One file of a Backup-GPO folder.",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256", "data"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\\\:\\u0000-\\u001f\\u007f/]+(/[^\\\\:\\u0000-\\u001f\\u007f/]+)*$",
+          "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+          "description": "A relative path of non-empty names separated by '/', with no '.' or '..' name, no ':' or '\\' and no control characters."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 67108864,
+          "description": "The number of bytes in the file."
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "data": {
+          "type": "string",
+          "description": "The file's bytes in standard base64 with padding."
+        }
+      }
+    },
+    "structureLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["structure"],
+      "properties": {
+        "structure": { "$ref": "#/$defs/structure" }
+      }
+    },
+    "structure": {
+      "type": "object",
+      "description": "The domain structure the exporter read: scopes of management and WMI filters.",
+      "additionalProperties": false,
+      "required": ["scopes", "wmi_filters"],
+      "properties": {
+        "gaps": {
+          "type": "array",
+          "maxItems": 100000,
+          "description": "Present only when the exporter could not read part of the directory (for example, sites it was denied). Each entry makes the comparison incomplete.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["what", "reason"],
+            "properties": {
+              "what": { "type": "string", "minLength": 1, "maxLength": 1024 },
+              "reason": { "type": "string", "minLength": 1, "maxLength": 4096 }
+            }
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "kind", "blocked", "gplink"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "description": "The distinguished name."
+              },
+              "kind": { "enum": ["domain", "ou", "site"] },
+              "blocked": {
+                "type": "boolean",
+                "description": "Whether the scope blocks inheritance (gPOptions bit 1)."
+              },
+              "gplink": {
+                "type": "string",
+                "maxLength": 1048576,
+                "description": "The raw gPLink attribute: [LDAP://cn={GUID},...;options] entries. Link order 1 is the last entry. Options bit 1 disables the link and bit 2 enforces it. Empty when there are no links."
+              }
+            }
+          }
+        },
+        "wmi_filters": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "description", "query"],
+            "properties": {
+              "id": { "$ref": "#/$defs/guid" },
+              "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+              "description": { "type": "string", "maxLength": 65536 },
+              "query": {
+                "type": "string",
+                "maxLength": 1048576,
+                "description": "The WQL text (msWMI-Parm2)."
+              }
+            }
+          }
+        }
+      }
+    },
+    "end": {
+      "type": "object",
+      "description": "The last line.",
+      "additionalProperties": false,
+      "required": ["end", "files", "sha256"],
+      "properties": {
+        "end": { "const": true },
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000,
+          "description": "The number of file lines."
+        },
+        "sha256": {
+          "allOf": [{ "$ref": "#/$defs/sha256" }],
+          "description": "The SHA-256 of every byte before this line."
+        }
+      }
+    }
+  }
+}
