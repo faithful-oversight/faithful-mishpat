@@ -29,6 +29,7 @@ from faithful_mishpat.formats.bundle import (
     parse_gplink,
     read_bundle,
     som_path,
+    wql,
 )
 from faithful_mishpat.model import Link, Scope, Source, WmiFilter
 from tests import fixtures_gpo as fx
@@ -747,6 +748,96 @@ def test_parse_gplink_refuses_malformed_entries(value: str) -> None:
 )
 def test_som_path(dn: str, kind: str, expected: str) -> None:
     assert som_path(dn, kind) == expected
+
+
+def parm2(*queries: tuple[str, str, str], count: int | None = None) -> str:
+    """An ``msWMI-Parm2`` value: the count, then each query's three lengths and fields."""
+    parts = [str(len(queries) if count is None else count)]
+    for language, space, text in queries:
+        parts += [str(len(language)), str(len(space)), str(len(text)), language, space, text]
+    return ";".join([*parts, ""])
+
+
+OS_QUERY = ("WQL", "root\\CIMv2", 'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%"')
+
+
+def test_wql_writes_one_query_as_namespace_and_text() -> None:
+    assert wql(parm2(OS_QUERY)) == ": ".join(OS_QUERY[1:])
+    assert wql("1;3;10;35;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem;") == (
+        "root\\CIMv2: SELECT * FROM Win32_OperatingSystem"
+    )
+
+
+def test_wql_writes_each_query_on_its_own_line() -> None:
+    other = ("WQL", "root\\wmi", "SELECT * FROM Foo; SELECT 2")  # the text may hold a ";"
+    assert wql(parm2(OS_QUERY, other)) == "\n".join(": ".join(q[1:]) for q in (OS_QUERY, other))
+
+
+def test_wql_keeps_quotes_and_empty_fields() -> None:
+    assert wql(parm2(("WQL", "root\\cimv2", "x"))) == "root\\cimv2: x"
+    assert wql(parm2(("WQL", "", "SELECT 1"))) == ": SELECT 1"
+    assert wql(parm2(("WQL", "root\\cimv2", ""))) == "root\\cimv2: "
+
+
+def test_wql_ignores_white_space_after_the_last_query() -> None:
+    assert wql(parm2(("WQL", "root\\cimv2", "x")) + "\r\n ") == "root\\cimv2: x"
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "",  # empty
+        "   ",
+        ";",
+        "SELECT * FROM Win32_OperatingSystem",  # a plain query, not the attribute's layout
+        "x;3;10;5;WQL;root\\CIMv2;SELECT 1;",  # non-numeric count
+        "1.5;3;10;8;WQL;root\\CIMv2;SELECT 1;",
+        "0;",  # a count of none holds no query
+        "-1;",
+        "2;" + parm2(("WQL", "root\\cimv2", "x"), count=1).split(";", 1)[1],  # count too high
+        "1;3;10;8;WQL;root\\CIMv2;SELECT 1;WQL;root\\CIMv2;SELECT 2;",  # trailing query
+        "1;3;10;8;WQL;root\\CIMv2;SELECT 1;junk",  # trailing junk
+        "1;3;10;8;WQL;root\\CIMv2;SELECT 1",  # no closing separator
+        "1;3;10;8;WQLroot\\CIMv2;SELECT 1;",  # no separator after the language
+        "1;3;10;8;WQL;root\\CIMv2SELECT 1;",  # no separator after the namespace
+        "1;3;10;9;WQL;root\\CIMv2;SELECT 1;",  # text length too long
+        "1;3;10;7;WQL;root\\CIMv2;SELECT 1;",  # text length too short
+        "1;3;9;8;WQL;root\\CIMv2;SELECT 1;",  # namespace length too short
+        "1;3;11;8;WQL;root\\CIMv2;SELECT 1;",  # namespace length too long
+        "1;2;10;8;WQL;root\\CIMv2;SELECT 1;",  # language length too short
+        "1;4;10;8;WQL;root\\CIMv2;SELECT 1;",  # language length too long
+        "1;3;10;-8;WQL;root\\CIMv2;SELECT 1;",  # negative length
+        "1;-1;10;8;WQL;root\\CIMv2;SELECT 1;",
+        "1;3;10;a;WQL;root\\CIMv2;SELECT 1;",  # non-numeric length
+        "1;3;10;",  # lengths with no fields
+        "1;3;10;8",
+        "1;3;10",  # a missing length
+        "1;",  # a count with no query
+        "1",
+    ],
+)
+def test_wql_returns_anything_that_is_not_the_layout_unchanged(malformed: str) -> None:
+    assert wql(malformed) == malformed
+
+
+def test_wql_returns_the_value_unchanged_when_a_later_query_is_malformed() -> None:
+    good = parm2(OS_QUERY, ("WQL", "root\\wmi", "SELECT 1"))
+    broken = good[:-3] + ";"  # the second query's text is now shorter than its length
+    assert wql(broken) == broken
+
+
+def test_a_bundle_writes_wmi_filter_queries_as_namespace_and_text(tmp_path: Path) -> None:
+    filters = [
+        {
+            "id": fx.braces(fx.WMI_ID),
+            "name": "Win11 only",
+            "description": "d",
+            "query": parm2(OS_QUERY),
+        }
+    ]
+    result = read(tmp_path, bundle_bytes(two_gpos(), struct_=structure(filters=filters)))
+    a = next(g for g in result.gpos if g.guid == GUID_A)
+    assert a.wmi_filter == WmiFilter("Win11 only", "d", fx.WMI_ID, ": ".join(OS_QUERY[1:]))
 
 
 # --- paths ----------------------------------------------------------------------------------

@@ -34,11 +34,17 @@ def settings(gpo: Gpo, area: str | None = None) -> dict[tuple[str, ...], Setting
     return {s.identity: s for s in gpo.settings if area is None or s.area == area}
 
 
-def first_element(setting: Setting) -> dict[str, Any]:
+def policy_value(setting: Setting) -> dict[str, Any]:
     value = cast("dict[str, Any]", setting.value)
-    (element,) = value["elements"]
-    assert isinstance(element, dict)
-    return element
+    assert isinstance(value, dict)
+    return value
+
+
+def first_element(setting: Setting) -> Any:
+    """The one option a policy holds, by the name the editor shows."""
+    value = policy_value(setting)
+    (name,) = [key for key in value if key != "state"]
+    return value[name]
 
 
 def only(gpo: Gpo) -> Setting:
@@ -187,7 +193,7 @@ def test_policy_value_and_context() -> None:
     )
     assert setting.key == ("Windows Components/Thing", "Allow thing")
     assert setting.title == "Allow thing"
-    assert setting.value == {"state": "Enabled", "elements": []}
+    assert setting.value == {"state": "Enabled"}
     assert setting.context == {
         "category": "Windows Components/Thing",
         "explain": "Explains Allow thing.",
@@ -211,15 +217,51 @@ def test_policy_elements_are_sorted_and_typed() -> None:
     assert setting.scope == "User"
     assert setting.value == {
         "state": "Enabled",
-        "elements": [
-            {"kind": "CheckBox", "name": "Quiet", "state": "Disabled", "value": None},
-            {"kind": "DropDownList", "name": "Day", "state": "Enabled", "value": "0 - Every day"},
-            {"kind": "EditText", "name": "Empty", "state": "Enabled", "value": ""},
-            {"kind": "EditText", "name": "Path", "state": "Enabled", "value": "42"},
-            {"kind": "Numeric", "name": "Size", "state": "Enabled", "value": 32768},
-        ],
+        "Quiet": "Disabled",
+        "Day": "0 - Every day",
+        "Empty": "",
+        "Path": "42",
+        "Size": 32768,
     }
+    assert list(policy_value(setting)) == ["state", "Quiet", "Day", "Empty", "Path", "Size"]
     assert setting.context["comment"] == "Ticket 123"
+
+
+def test_policy_options_are_keyed_by_the_name_the_editor_shows() -> None:
+    def check(name: str, state: str) -> str:
+        return f"<q1:CheckBox><q1:Name>{name}</q1:Name><q1:State>{state}</q1:State></q1:CheckBox>"
+
+    body = (
+        check("Same", "Enabled")
+        + check("Same", "Disabled")
+        + check("Same", "Enabled")
+        + check("State", "Disabled")
+        + "<q1:Numeric><q1:State>Enabled</q1:State><q1:Value>5</q1:Value></q1:Numeric>"
+        + "<q1:Numeric><q1:State>Enabled</q1:State><q1:Value>6</q1:Value></q1:Numeric>"
+    )
+    value = policy_value(only(one(computer=registry_ext(policy("P", "Disabled", body=body)))))
+    assert value["state"] == "Disabled"  # the policy's own state is not overwritten
+    assert value["State (option)"] == "Disabled"
+    assert value["Numeric"] == 5  # no name: the kind stands in for it
+    assert value["Numeric #2"] == 6
+    assert sorted(v for k, v in value.items() if k.startswith("Same")) == [
+        "Disabled",
+        "Enabled",
+        "Enabled",
+    ]
+    assert {"Same", "Same #2", "Same #3"} <= value.keys()
+
+
+def test_list_box_options_travel_with_the_value() -> None:
+    body = """<q1:ListBox><q1:Name>Rules</q1:Name><q1:State>Enabled</q1:State>
+      <q1:Additive>true</q1:Additive>
+      <q1:Value><q1:Element><q1:Name>a</q1:Name><q1:Data>1</q1:Data></q1:Element></q1:Value>
+      </q1:ListBox>"""
+    value = policy_value(only(one(computer=registry_ext(policy("L", body=body)))))
+    assert value["Rules"] == {
+        "value": [{"data": "1", "name": "a"}],
+        "options": {"Additive": True},
+    }
 
 
 def test_policy_element_order_does_not_matter() -> None:
@@ -244,6 +286,7 @@ def test_list_box_entries_are_a_sorted_set_with_options() -> None:
         {"data": "1", "name": "zeta"},
     ]
     assert element["options"] == {"Additive": False, "ExplicitValue": True, "ValuePrefix": "R"}
+    assert set(element) == {"value", "options"}
 
 
 def test_empty_list_box_value() -> None:
@@ -251,8 +294,7 @@ def test_empty_list_box_value() -> None:
         "<q1:ListBox><q1:Name>Rules</q1:Name><q1:State>Enabled</q1:State><q1:Value/></q1:ListBox>"
     )
     element = first_element(only(one(computer=registry_ext(policy("L", body=body)))))
-    assert element["value"] == []
-    assert "options" not in element
+    assert element == []
 
 
 def test_list_box_option_that_is_not_a_flag_stays_text() -> None:
@@ -348,7 +390,7 @@ def test_security_options() -> None:
         1,
         "Security Option",
     )
-    assert first.context == {"display": "Enabled"}
+    assert first.context == {"display": "Enabled", "label:1": "Enabled"}
     assert (second.key, second.value, second.title) == (
         ("NewAdministratorName",),
         '"localadmin"',
@@ -380,7 +422,11 @@ def test_user_rights_are_a_sorted_set_of_upper_case_sids() -> None:
     a = only(one(computer=security_ext(user_right("SeBackupPrivilege", admins, system, admins))))
     b = only(one(computer=security_ext(user_right("SeBackupPrivilege", system, admins))))
     assert a.value == b.value == ["S-1-5-18", "S-1-5-32-544"]
-    assert a.context == {"members": "BUILTIN\\Administrators, NT AUTHORITY\\SYSTEM"}
+    assert a.context == {
+        "members": "BUILTIN\\Administrators, NT AUTHORITY\\SYSTEM",
+        "label:S-1-5-32-544": "BUILTIN\\Administrators",
+        "label:S-1-5-18": "NT AUTHORITY\\SYSTEM",
+    }
     assert (a.kind, a.key, a.title) == (
         "User Rights Assignment",
         ("SeBackupPrivilege",),
@@ -398,8 +444,34 @@ def test_user_right_falls_back_to_the_name_and_may_be_empty() -> None:
     )
     debug, tcb = gpo.settings
     assert debug.value == ["CORP\\Unresolved"]
+    assert debug.context == {"members": "CORP\\Unresolved"}  # the name is the id: nothing to add
     assert tcb.value == []
     assert tcb.context == {}
+
+
+def test_user_right_names_only_members_that_have_both_a_sid_and_a_name() -> None:
+    bare = f'<q1:Member><q3:SID xmlns:q3="{TYPES}">S-1-5-19</q3:SID></q1:Member>'
+    right = user_right("SeBackupPrivilege", member("S-1-5-32-544", "BUILTIN\\Administrators"), bare)
+    setting = only(one(computer=security_ext(right)))
+    assert setting.value == ["S-1-5-19", "S-1-5-32-544"]
+    assert {k: v for k, v in setting.context.items() if k.startswith("label:")} == {
+        "label:S-1-5-32-544": "BUILTIN\\Administrators"
+    }
+
+
+def test_security_option_labels_the_value_only_when_there_are_words() -> None:
+    def option(number: int, display: str) -> str:
+        shown = f"<q1:DisplayString>{display}</q1:DisplayString>" if display else ""
+        return (
+            "<q1:SecurityOptions><q1:KeyName>MACHINE\\Lsa\\Level</q1:KeyName>"
+            f"<q1:SettingNumber>{number}</q1:SettingNumber>"
+            f"<q1:Display><q1:Name>Level</q1:Name>{shown}</q1:Display></q1:SecurityOptions>"
+        )
+
+    (with_words,) = one(computer=security_ext(option(5, "Send NTLMv2 response only"))).settings
+    assert with_words.context["label:5"] == "Send NTLMv2 response only"
+    (without,) = one(computer=security_ext(option(5, ""))).settings
+    assert not [key for key in without.context if key.startswith("label:")]
 
 
 def test_user_right_without_name_is_a_problem() -> None:

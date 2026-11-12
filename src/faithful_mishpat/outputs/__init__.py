@@ -240,6 +240,7 @@ def build_report(  # noqa: PLR0913 - the documented API
                 "before": copy.deepcopy(d.before),
                 "after": copy.deepcopy(d.after),
                 "note": d.note,
+                "labels": dict(d.labels),
                 "sources": [_source(s) for s in d.sources],
             }
             for d in diffs

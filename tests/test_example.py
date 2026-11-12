@@ -180,8 +180,13 @@ def test_the_example_shows_each_change_it_describes() -> None:
 
     drop_down = one("setting", subject="Configure Automatic Updates")
     assert drop_down["kind"] == "changed"
-    assert drop_down["before"]["elements"][0]["value"].startswith("3 - ")
-    assert drop_down["after"]["elements"][0]["value"].startswith("4 - ")
+    option = "Configure automatic updating:"
+    assert drop_down["before"][option].startswith("3 - ")
+    assert drop_down["after"][option].startswith("4 - ")
+    assert drop_down["before"]["state"] == drop_down["after"]["state"] == "Enabled"
+    assert {k for k in drop_down["before"] if drop_down["before"][k] != drop_down["after"][k]} == {
+        option
+    }  # one option changed; the rest of the policy is unchanged
     assert one("setting", area="Registry.pol", kind="changed")["after"]["data"] == 4
     directive = one(
         "setting",
@@ -208,6 +213,63 @@ def test_the_example_shows_each_change_it_describes() -> None:
     enforced = [d for d in links if d["after"] == {"enabled": True, "enforced": True}]
     assert [d["gpo_name"] for d in disabled] == ["Staff Desktop Settings"]
     assert [d["gpo_name"] for d in enforced] == ["Workstation Hardening"]
+
+
+def test_the_example_names_accounts_and_gives_security_options_their_words() -> None:
+    differences = committed()["differences"]
+    by_subject = {d["subject"]: d for d in differences if d["category"] == "setting"}
+    assert by_subject["SeDenyNetworkLogonRight"]["labels"] == {
+        "S-1-5-113": "NT AUTHORITY\\Local account",
+        "S-1-5-32-546": "BUILTIN\\Guests",
+    }
+    level = by_subject["Network security: LAN Manager authentication level"]
+    assert (level["before"], level["after"]) == (3, 5)
+    assert level["labels"] == {
+        "3": "Send NTLMv2 response only",
+        "5": "Send NTLMv2 response only. Refuse LM & NTLM",
+    }
+    assert by_subject["Network access: Restrict anonymous access"]["labels"] == {"1": "Enabled"}
+    assert by_subject["LockoutBadCount"]["labels"] == {}
+    md = (SAMPLE_DIR / FILE_NAMES["md"]).read_text(encoding="utf-8")
+    assert (
+        "| 3 (Send NTLMv2 response only) | 5 (Send NTLMv2 response only. Refuse LM \\& NTLM) |"
+        in md
+    )
+    assert "S-1-5-113 (NT AUTHORITY\\\\Local account), S-1-5-32-546 (BUILTIN\\\\Guests)" in md
+
+
+def test_the_example_reads_as_a_review() -> None:
+    document = committed()
+    differences = document["differences"]
+    assert document["comparison"]["before"] == "corp-before.jsonl"
+    assert document["comparison"]["after"] == "corp-after.jsonl"
+    # Scope-level subjects are written as paths, as GPO links are.
+    scope_level = [d for d in differences if not d["gpo"]]
+    assert sorted(d["subject"] for d in scope_level) == [
+        "corp.example/Servers/Web",
+        "corp.example/Workstations: link order",
+    ]
+    # A WMI filter query is readable, not the raw directory attribute.
+    (wmi,) = (d for d in differences if d["category"] == "wmi-filter")
+    for query in (wmi["before"]["query"], wmi["after"]["query"]):
+        assert query.startswith("root\\CIMv2: SELECT ")
+        assert ";WQL;" not in query
+    # A GPO that was created or deleted carries its name on the side that has it.
+    gpo_rows = {d["kind"]: d for d in differences if d["category"] == "gpo"}
+    assert (gpo_rows["added"]["before"], gpo_rows["added"]["after"]) == (
+        None,
+        "Edge Browser Policy",
+    )
+    assert (gpo_rows["removed"]["before"], gpo_rows["removed"]["after"]) == (
+        "Legacy Kiosk Lockdown", None,
+    )  # fmt: skip
+    md = (SAMPLE_DIR / FILE_NAMES["md"]).read_text(encoding="utf-8")
+    assert "## Domain structure" in md
+    assert "Scope inheritance" not in md
+    assert "(not set) | (not set)" not in md
+    assert "| Configure Automatic Updates | changed | Configure automatic updating:: 3 - " in md
+    assert "Scheduled install day" not in md  # unchanged options of the policy are left out
+    assert '| type: REG_SZ; data: " " |' in md.replace("REG\\_SZ", "REG_SZ")
 
 
 def test_a_reordered_user_right_and_an_unchanged_gpo_show_no_difference() -> None:

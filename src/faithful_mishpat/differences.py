@@ -47,6 +47,9 @@ class Difference:
         after: The value after, or ``None`` when removed.
         sources: Where each side was read, before first.
         note: Extra words a reader needs, such as why an order changed.
+        labels: Words to show beside values, as ``(value, words)`` pairs: an
+            account name beside a SID, or a security option's meaning beside its
+            number. Never compared.
     """
 
     category: str
@@ -60,6 +63,7 @@ class Difference:
     area: str = ""
     sources: tuple[Source, ...] = ()
     note: str = ""
+    labels: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -232,6 +232,7 @@ def rich_differences() -> list[Difference]:
             after=[SID_ADMINS],
             area="Security",
             scope="Computer",
+            labels=((SID_ADMINS, "CORP\\Domain Admins"), (SID_STAFF, "CORP\\Staff")),
         ),
         diff(
             category="setting",
@@ -263,7 +264,7 @@ def rich_differences() -> list[Difference]:
             kind="changed",
             gpo="",
             gpo_name="",
-            subject="OU=Servers,DC=corp,DC=example",
+            subject="corp.example/Servers",
             before=False,
             after=True,
             scope="",
@@ -372,6 +373,7 @@ def hostile_comparison(prefix: str = "") -> Comparison:
                 scope="Computer",
                 area=bad,
                 sources=(Source(bad, bad), Source(bad, bad)),
+                labels=((bad, bad),),
             ),
             diff(category="inheritance", gpo="", gpo_name="", subject=bad, scope="", area=""),
         ],
@@ -400,8 +402,10 @@ def crowded() -> tuple[Comparison, Snapshot]:
         guid = f"{i + 1000:08d}-0000-0000-0000-000000000000"
         pairs.append(pair(guid, f"GPO {i:03d}", "changed", 1))
         differences.append(diff(gpo=guid, gpo_name=f"GPO {i:03d}", subject=f"item {i}"))
-    pairs += [pair(f"{i:08d}-0000-0000-0000-000000000001", f"Quiet {i}", "unchanged", 0)
-              for i in range(10)]  # fmt: skip
+    pairs += [
+        pair(f"{i:08d}-0000-0000-0000-000000000001", f"Quiet {i}", "unchanged", 0)
+        for i in range(10)
+    ]
     comparison = Comparison(
         before="a",
         after="b",
@@ -506,6 +510,10 @@ def test_the_schema_rejects_what_it_should(rich_report: dict[str, Any]) -> None:
         lambda d: d["gpos"][0].update(status="gone"),
         lambda d: d["differences"][0].update(scope="Both"),
         lambda d: d["differences"][0].pop("before"),
+        lambda d: d["differences"][0].pop("labels"),
+        lambda d: d["differences"][0].update(labels=["x"]),
+        lambda d: d["differences"][0].update(labels={"1": 2}),
+        lambda d: d["differences"][0].update(labels={"1": None}),
         lambda d: d["summary"]["by_kind"].update(moved=1),
         lambda d: d.update(extra=1),
     ]
@@ -662,9 +670,21 @@ def test_json_keeps_documented_order_and_a_final_newline(rich_report: dict[str, 
     text = render_json(rich_report)
     assert text.endswith("}\n")
     assert list(json.loads(text)) == [
-        "$schema", "schema_version", "tool", "generated_at", "inputs", "options", "comparison",
-        "summary", "notices", "gpos", "differences", "gaps", "problems", "limitations",
-    ]  # fmt: skip
+        "$schema",
+        "schema_version",
+        "tool",
+        "generated_at",
+        "inputs",
+        "options",
+        "comparison",
+        "summary",
+        "notices",
+        "gpos",
+        "differences",
+        "gaps",
+        "problems",
+        "limitations",
+    ]
     assert json.loads(text) == rich_report
     assert "é" in render_json({"x": "é"})
 
@@ -698,10 +718,13 @@ def test_headline_states() -> None:
     assert two[1] == "3 differences across 2 GPOs. Every input was read in full."
     scope = diff(category="inheritance", gpo="", gpo_name="", scope="", area="")
     assert head(differences=[scope])[1] == (
-        "1 difference in scope inheritance. Every input was read in full."
+        "1 difference in the domain's structure. Every input was read in full."
     )
     both = head(differences=[diff(), scope])[1]
-    assert both == "2 differences across 1 GPO and scope inheritance. Every input was read in full."
+    assert (
+        both
+        == "2 differences across 1 GPO and the domain's structure. Every input was read in full."
+    )
     bad = [Problem(src("x", ""), "no")]
     assert head(problems=bad) == (
         "incomplete",
@@ -731,6 +754,15 @@ def test_headline_states() -> None:
             "a: [1, 2]; b: (c: (not set)); d: []; e: ()",
         ),
         ([["a"], {"k": "v"}], "[a], (k: v)"),
+        (" ", '" "'),  # text of only spaces would look empty
+        ("   ", '"   "'),
+        ("\t", '"\t"'),
+        (" lead", '" lead"'),  # edge spaces would vanish
+        ("trail ", '"trail "'),
+        ("  both  ", '"  both  "'),
+        ("in side", "in side"),  # spaces inside are visible: no quotes
+        ([" ", "x"], '" ", x'),
+        ({"a": " b"}, 'a: " b"'),
     ],
 )
 def test_values_read_plainly(value: Any, text: str) -> None:
@@ -753,13 +785,16 @@ def test_markdown_reads_in_the_documented_order(rich_report: dict[str, Any]) -> 
     md = r.render_markdown(rich_report)
     assert md.startswith("# GPO change review\n")
     order = [
-        "**20 differences across 6 GPOs and scope inheritance. Incomplete: 1 problem",
+        (
+            "**20 differences across 6 GPOs and the domain's structure (2 GPOs in only one input). "
+            "Incomplete: 1 problem"
+        ),
         "## Notices",
         "## GPOs compared",
         "## Changes by GPO",
         "### Servers Baseline (11111111-1111-1111-1111-111111111111)",
         "#### Status",
-        "## Scope inheritance",
+        "## Domain structure",
         "## Not compared",
         "## Problems",
         "## Inputs",
@@ -803,7 +838,7 @@ def test_markdown_gpo_section_shows_after_side_context(rich_report: dict[str, An
     assert "- **Security filtering:** none (no entry allows Apply Group Policy)" in new
     assert "- **Links:** none" in new
     assert "- **Status:** computer half not recorded; user half not recorded" in new
-    unknown = md[md.index("### Workstations 2026") : md.index("## Scope inheritance")]
+    unknown = md[md.index("### Workstations 2026") : md.index("## Domain structure")]
     assert "- **WMI filter:** not recorded" in unknown
     assert "- **Security filtering:** not recorded" in unknown
     assert "- **Links:** not recorded" in unknown
@@ -843,7 +878,10 @@ def test_markdown_groups_by_category_then_scope_and_area(rich_report: dict[str, 
     assert "| Account lockout | added | (not set) | 5 |" in section
     assert "| Legacy flag | removed | on | (not set) |" in section
     assert "| Empty things | changed | (empty) | (empty list) |" in section
-    assert f"| Rights | changed | {SID_ADMINS}, {SID_STAFF} | {SID_ADMINS} |" in section
+    assert (
+        f"| Rights | changed | {SID_ADMINS} (CORP\\\\Domain Admins), {SID_STAFF} (CORP\\\\Staff) "
+        f"| {SID_ADMINS} (CORP\\\\Domain Admins) |"
+    ) in section  # Markdown doubles the backslash of an account name
     assert "startup: Manual" in section
     assert "acl: (ace: [a, b], n: 2)" in section.replace("\\[", "[").replace("\\]", "]")
     assert "Nothing | changed | (no entries) | [], () |" in section.replace("\\[", "[").replace(
@@ -855,12 +893,9 @@ def test_markdown_groups_by_category_then_scope_and_area(rich_report: dict[str, 
 
 def test_markdown_scope_level_section_and_kinds(rich_report: dict[str, Any]) -> None:
     md = r.render_markdown(rich_report)
-    scope = md[md.index("## Scope inheritance") : md.index("## Not compared")]
+    scope = md[md.index("## Domain structure") : md.index("## Not compared")]
     assert "### Inheritance" in scope
-    assert (
-        "| OU=Servers,DC=corp,DC=example | changed | false | true | Blocks inheritance now."
-        in scope
-    )
+    assert "| corp.example/Servers | changed | false | true | Blocks inheritance now." in scope
     for word in ("only in before", "only in after", "renamed", "removed", "added"):
         assert word in md
     table = md[md.index("## GPOs compared") : md.index("## Changes by GPO")]
@@ -879,7 +914,7 @@ def test_markdown_with_nothing_to_show() -> None:
     assert "## Notices" not in md
     assert "## Not compared" not in md
     assert "## Problems" not in md
-    assert "## Scope inheritance" not in md
+    assert "## Domain structure" not in md
     assert "**No differences. Every input was read in full.**" in md
     quiet = empty_comparison(pairs=[pair(G_QUIET, "Quiet", "unchanged", 0)])
     md = r.render_markdown(build_report(quiet, [], GENERATED, "0.1.0"))
@@ -982,13 +1017,31 @@ def test_caps_apply_only_with_the_json_report(renderer: Any) -> None:
     report = build_report(comparison, [], GENERATED, "0.1.0", after=snapshot)
     whole = renderer(report, shorten=False)
     assert "JSON report" not in whole
-    last = ["notice 29", "gap 29", "problem 29", "GPO 118", "Quiet 9", "setting 259", "OU29",
-            "group9 (", "item 118"]  # fmt: skip
+    last = [
+        "notice 29",
+        "gap 29",
+        "problem 29",
+        "GPO 118",
+        "Quiet 9",
+        "setting 259",
+        "OU29",
+        "group9 (",
+        "item 118",
+    ]
     for text in last:
         assert text in whole
     capped = renderer(report, shorten=True)
-    for text in ("notice 29", "gap 29", "problem 29", "GPO 118", "Quiet 9", "setting 259",
-                 "OU29", "group9 (", "item 118"):  # fmt: skip
+    for text in (
+        "notice 29",
+        "gap 29",
+        "problem 29",
+        "GPO 118",
+        "Quiet 9",
+        "setting 259",
+        "OU29",
+        "group9 (",
+        "item 118",
+    ):
         assert text not in capped
     for text in (
         "5 more in the JSON report.",  # notices: 30 listed 25
@@ -1017,7 +1070,10 @@ def test_terminal_summary_is_plain_and_safe(rich_report: dict[str, Any]) -> None
     text = r.terminal_summary(rich_report)
     lines = text.splitlines()
     assert lines[0] == "mishpat 0.1.0"
-    assert lines[1].startswith("20 differences across 6 GPOs and scope inheritance. Incomplete:")
+    assert lines[1].startswith(
+        "20 differences across 6 GPOs and the domain's structure (2 GPOs in only one input). "
+        "Incomplete:"
+    )
     assert "  Settings: 8" in lines
     assert "  GPO: 5" in lines
     assert "  1 notice: read them first." in lines
@@ -1104,8 +1160,16 @@ def test_html_is_one_self_contained_accessible_page(rich_report: dict[str, Any])
     assert '<html lang="en">' in page
     assert '<th scope="col">' in page
     assert '<th scope="row">' in page
-    for anchor in ("notices", "gpos", "changes", "scope", "gaps", "problems", "inputs",
-                   "limitations"):  # fmt: skip
+    for anchor in (
+        "notices",
+        "gpos",
+        "changes",
+        "scope",
+        "gaps",
+        "problems",
+        "inputs",
+        "limitations",
+    ):
         assert f'href="#{anchor}"' in page
         assert f'id="{anchor}"' in page
     assert page.count("<h1>") == 1
@@ -1136,6 +1200,352 @@ def test_html_for_an_empty_comparison_and_a_complete_one() -> None:
     assert "<a href" not in page.split('<h2 id="gpos">')[1].split('<h2 id="changes">')[0]
 
 
+# --- what changed, with names and meanings ---------------------------------------------------
+
+
+def one_difference(*differences: Difference, **kw: Any) -> dict[str, Any]:
+    pairs = {(d.gpo, d.gpo_name) for d in differences if d.gpo}
+    comparison = empty_comparison(
+        differences=list(differences),
+        pairs=[pair(g, n, "changed", 1) for g, n in sorted(pairs)],
+        **kw,
+    )
+    return build_report(comparison, [], GENERATED, "0.1.0")
+
+
+def policy(before: dict[str, Any], after: dict[str, Any]) -> Difference:
+    return diff(
+        subject="Configure Automatic Updates",
+        area="Administrative Templates",
+        before=before,
+        after=after,
+        sources=(),
+    )
+
+
+POLICY_BEFORE = {
+    "state": "Enabled",
+    "Schedule": "0 - Every day",
+    "Install day": 3,
+    "Quiet": "Disabled",
+}
+
+
+def test_one_changed_policy_option_shows_that_option_alone() -> None:
+    report = one_difference(policy(POLICY_BEFORE, {**POLICY_BEFORE, "Install day": 5}))
+    md = r.render_markdown(report)
+    assert "| Configure Automatic Updates | changed | Install day: 3 | Install day: 5 |" in md
+    html = r.render_html(report)
+    assert '<span class="val">Install day: 3</span>' in html
+    assert '<span class="chg"><span class="val">Install day: 5</span></span>' in html
+    for text in (md, html):
+        assert "Schedule" not in text
+        assert "Quiet" not in text
+    assert "Enabled" not in md  # the unchanged state is not repeated
+    # The JSON report keeps the whole value, so nothing is lost.
+    (found,) = report["differences"]
+    assert found["before"] == POLICY_BEFORE
+    assert found["after"] == {**POLICY_BEFORE, "Install day": 5}
+
+
+def test_several_changed_options_show_each_in_the_order_the_policy_lists_them() -> None:
+    after = {**POLICY_BEFORE, "state": "Disabled", "Quiet": "Enabled"}
+    md = r.render_markdown(one_difference(policy(POLICY_BEFORE, after)))
+    assert (
+        "| Configure Automatic Updates | changed | state: Enabled; Quiet: Disabled "
+        "| state: Disabled; Quiet: Enabled |"
+    ) in md
+    assert "Schedule" not in md
+
+
+def test_an_option_that_exists_on_one_side_only_is_shown_as_not_set_on_the_other() -> None:
+    added = {**POLICY_BEFORE, "Retries": 2}
+    md = r.render_markdown(one_difference(policy(POLICY_BEFORE, added)))
+    assert "| Configure Automatic Updates | changed | Retries: (not set) | Retries: 2 |" in md
+    md = r.render_markdown(one_difference(policy(added, POLICY_BEFORE)))
+    assert "| Configure Automatic Updates | changed | Retries: 2 | Retries: (not set) |" in md
+
+
+def test_a_nested_list_box_option_is_one_changed_option() -> None:
+    def rules(*names: str) -> dict[str, Any]:
+        return {"state": "Enabled", "Rules": {"value": list(names), "options": {"Additive": True}}}
+
+    md = r.render_markdown(one_difference(policy(rules("a"), rules("a", "b"))))
+    assert (
+        "| Configure Automatic Updates | changed "
+        "| Rules: (value: \\[a\\], options: (Additive: true)) "
+        "| Rules: (value: \\[a, b\\], options: (Additive: true)) |"
+    ) in md  # Markdown escapes the brackets
+    assert "Enabled" not in md.split("| Subject |")[1]
+
+
+def test_when_every_key_differs_the_whole_value_is_shown() -> None:
+    before = {"state": "Enabled", "Day": "Monday"}
+    after = {"state": "Disabled", "Day": "Friday"}
+    md = r.render_markdown(one_difference(policy(before, after)))
+    assert (
+        "| Configure Automatic Updates | changed | state: Enabled; Day: Monday "
+        "| state: Disabled; Day: Friday |"
+    ) in md
+    html = r.render_html(one_difference(policy(before, after)))
+    assert '<span class="val">state: Enabled; Day: Monday</span>' in html
+    # Keys that exist on one side only count as differing too.
+    md = r.render_markdown(one_difference(policy({"a": 1}, {"b": 2})))
+    assert "| changed | a: 1 | b: 2 |" in md
+
+
+def test_equal_mappings_and_mappings_against_other_values_are_shown_whole() -> None:
+    def row(before: Any, after: Any) -> str:
+        md = r.render_markdown(one_difference(policy(before, after)))
+        (line,) = (x for x in md.splitlines() if x.startswith("| Configure Automatic Updates"))
+        return line.removesuffix(" |  |")
+
+    base = "| Configure Automatic Updates | changed |"
+    assert row({"a": 1}, {"a": 1}) == f"{base} a: 1 | a: 1"  # nothing differs: nothing to narrow to
+    assert row({"a": 1}, None) == f"{base} a: 1 | (not set)"
+    assert row([1], [2]) == f"{base} 1 | 2"
+    assert row({}, {"a": 1}) == f"{base} (no entries) | a: 1"
+
+
+def labelled(before: Any, after: Any, **labels: str) -> Difference:
+    return diff(
+        subject="Setting", before=before, after=after, sources=(), labels=tuple(labels.items())
+    )
+
+
+def test_labels_show_beside_list_items_and_scalars_in_markdown_and_html() -> None:
+    admins = "S-1-5-32-544"
+    users = "S-1-5-32-545"
+    rights = labelled(
+        [admins, users, "S-1-5-18"],
+        [admins],
+        **{admins: "BUILTIN\\Administrators", users: "BUILTIN\\Users"},
+    )
+    level = labelled(3, 5, **{"3": "Send LM and NTLM", "5": "Send NTLMv2 response only"})
+    report = one_difference(rights, level)
+    md = r.render_markdown(report)
+    assert (
+        "| Setting | changed | S-1-5-32-544 (BUILTIN\\\\Administrators), S-1-5-32-545 "
+        "(BUILTIN\\\\Users), S-1-5-18 | S-1-5-32-544 (BUILTIN\\\\Administrators) |"
+    ) in md  # an item without words is shown alone
+    assert "| Setting | changed | 3 (Send LM and NTLM) | 5 (Send NTLMv2 response only) |" in md
+    html = r.render_html(report)
+    assert "S-1-5-32-544 (BUILTIN\\Administrators), S-1-5-32-545 (BUILTIN\\Users), S-1-5-18" in html
+    assert '<span class="val">3 (Send LM and NTLM)</span>' in html
+    assert "5 (Send NTLMv2 response only)</span></span>" in html
+
+
+def test_labels_apply_to_booleans_and_text_but_not_to_nothing_or_mappings() -> None:
+    flag = diff(subject="Flag", before=True, after=None, sources=(), labels=(("true", "on"),))
+    words = labelled("Enabled", {"Enabled": "x"}, Enabled="the feature is on")
+    plain = labelled(3, 5)  # no words recorded
+    md = r.render_markdown(one_difference(flag, words, plain))
+    assert "| Flag | changed | true (on) | (not set) |" in md
+    assert "| Setting | changed | Enabled (the feature is on) | Enabled: x |" in md
+    assert "| Setting | changed | 3 | 5 |" in md
+
+
+def test_a_label_goes_beside_a_quoted_value() -> None:
+    padded = labelled(" x", "y", **{" x": "a leading space"})
+    md = r.render_markdown(one_difference(padded))
+    assert '| Setting | changed | " x" (a leading space) | y |' in md
+
+
+def test_labels_are_in_the_json_report_and_follow_the_schema() -> None:
+    report = one_difference(
+        labelled(3, 5, **{"5": "Send NTLMv2 response only", "3": "Send LM and NTLM"}),
+        diff(subject="Plain", sources=()),
+    )
+    schema_check("report-v1.schema.json", report)
+    with_words, plain = report["differences"]
+    assert with_words["labels"] == {"3": "Send LM and NTLM", "5": "Send NTLMv2 response only"}
+    assert plain["labels"] == {}
+    parsed = json.loads(render_json(report))
+    assert parsed["differences"][0]["labels"] == with_words["labels"]
+    assert list(with_words)[-2:] == ["labels", "sources"]
+
+
+def test_labels_are_copied_into_the_report() -> None:
+    difference = labelled(3, 5, **{"3": "x"})
+    report = one_difference(difference)
+    report["differences"][0]["labels"]["3"] = "changed"
+    assert difference.labels == (("3", "x"),)
+
+
+def test_quoted_text_reaches_markdown_html_and_the_terminal_intact() -> None:
+    report = one_difference(
+        diff(subject="Banner", before=" ", after="  on  ", sources=()),
+        diff(subject="Other", before="", after="plain", sources=()),
+    )
+    md = r.render_markdown(report)
+    assert '| Banner | changed | " " | "  on  " |' in md
+    assert "| Other | changed | (empty) | plain |" in md
+    html = r.render_html(report)
+    assert '<span class="val">&quot; &quot;</span>' in html
+    assert '<span class="chg"><span class="val">&quot;  on  &quot;</span></span>' in html
+
+
+def test_the_headline_counts_gpos_in_only_one_input() -> None:
+    def head(*differences: Difference, **kw: Any) -> str:
+        return r.headline(one_difference(*differences, **kw))[1]
+
+    before = diff(
+        category="gpo",
+        kind="only-before",
+        gpo=G_ONLY_B,
+        gpo_name="B",
+        subject="GPO",
+        before="B",
+        after=None,
+        scope="",
+        area="",
+        sources=(),
+    )
+    after = diff(
+        category="gpo",
+        kind="only-after",
+        gpo=G_ONLY_A,
+        gpo_name="A",
+        subject="GPO",
+        before=None,
+        after="A",
+        scope="",
+        area="",
+        sources=(),
+    )
+    assert head(before) == (
+        "1 difference across 1 GPO (1 GPO in only one input). Every input was read in full."
+    )
+    assert head(before, after) == (
+        "2 differences across 2 GPOs (2 GPOs in only one input). Every input was read in full."
+    )
+    assert head(before, diff()) == (
+        "2 differences across 2 GPOs (1 GPO in only one input). Every input was read in full."
+    )
+    scope = diff(category="inheritance", gpo="", gpo_name="", scope="", area="")
+    assert head(before, scope) == (
+        "2 differences across 1 GPO and the domain's structure (1 GPO in only one input). "
+        "Every input was read in full."
+    )
+    bad = [Problem(src("x", ""), "no")]
+    assert head(before, problems=bad) == (
+        "1 difference across 1 GPO (1 GPO in only one input). "
+        "Incomplete: 1 problem with an input, so differences may be missing."
+    )
+    # Added and removed GPOs, from two whole domains, are not "in only one input".
+    added = diff(
+        category="gpo",
+        kind="added",
+        gpo=G_NEW,
+        gpo_name="N",
+        subject="GPO",
+        before=None,
+        after="N",
+        scope="",
+        area="",
+        sources=(),
+    )
+    assert "only one input" not in head(added)
+
+
+def test_the_headline_with_only_one_input_gpos_is_in_every_rendering() -> None:
+    report = one_difference(
+        diff(
+            category="gpo",
+            kind="only-before",
+            gpo=G_ONLY_B,
+            gpo_name="B",
+            subject="GPO",
+            before="B",
+            after=None,
+            scope="",
+            area="",
+            sources=(),
+        )
+    )
+    line = "1 difference across 1 GPO (1 GPO in only one input)."
+    assert line in r.render_markdown(report)
+    assert line in r.render_html(report)
+    assert line in r.terminal_summary(report)
+
+
+def test_the_domain_structure_section_holds_only_scope_level_differences() -> None:
+    scope = diff(
+        category="inheritance",
+        gpo="",
+        gpo_name="",
+        subject="corp.example/Servers",
+        before="not blocked",
+        after="blocked",
+        scope="",
+        area="",
+        sources=(),
+    )
+    order = diff(
+        category="inheritance",
+        gpo="",
+        gpo_name="",
+        scope="",
+        area="",
+        sources=(),
+        subject="corp.example/Servers: link order",
+        before=["A", "B"],
+        after=["B", "A"],
+    )
+    report = one_difference(diff(sources=()), scope, order)
+    md = r.render_markdown(report)
+    assert "## Domain structure\n" in md
+    section = md[md.index("## Domain structure") :]
+    assert "| corp.example/Servers | changed | not blocked | blocked |" in section
+    assert "| corp.example/Servers: link order | changed | A, B | B, A |" in section
+    assert "Minimum password length" not in section
+    assert "Scope inheritance" not in md
+    html = r.render_html(report)
+    assert '<h2 id="scope">Domain structure</h2>' in html
+    assert '<a href="#scope">Domain structure</a>' in html
+    assert "Scope inheritance" not in html
+    alone = r.render_markdown(one_difference(diff(sources=())))
+    assert "Domain structure" not in alone.replace("the domain's structure", "")
+
+
+def test_gpo_added_and_removed_rows_show_the_name_on_the_side_that_has_it() -> None:
+    def gpo_row(kind: str, before: str | None, after: str | None) -> Difference:
+        return diff(
+            category="gpo",
+            kind=kind,
+            gpo=G_NEW,
+            gpo_name="Edge Policy",
+            subject="GPO",
+            before=before,
+            after=after,
+            scope="",
+            area="",
+            sources=(),
+        )
+
+    md = r.render_markdown(
+        one_difference(gpo_row("added", None, "Edge Policy"), gpo_row("removed", "Old", None))
+    )
+    assert "| GPO | added | (not set) | Edge Policy |" in md
+    assert "| GPO | removed | Old | (not set) |" in md
+    assert "(not set) | (not set)" not in md
+
+
+def test_the_comparison_sides_are_named_in_every_report() -> None:
+    comparison = Comparison(
+        before="corp-before.jsonl",
+        after="corp-after.jsonl",
+        match="guid",
+        differences=[diff()],
+        pairs=[pair(G_SERVERS, "Servers Baseline", "changed", 1)],
+    )
+    report = build_report(comparison, [], GENERATED, "0.1.0")
+    assert report["comparison"]["before"] == "corp-before.jsonl"
+    assert report["comparison"]["after"] == "corp-after.jsonl"
+    assert "Before: corp-before.jsonl. After: corp-after.jsonl." in r.render_markdown(report)
+    assert "corp-before.jsonl" in r.render_html(report)
+
+
 # --- CSV -------------------------------------------------------------------------------------
 
 
@@ -1151,9 +1561,20 @@ def test_csv_has_one_row_per_difference_with_the_caveat_on_every_row(
     assert not text.startswith("﻿")
     rows = rows_of(text)
     assert rows[0] == [
-        "category", "kind", "gpo_guid", "gpo_name", "scope", "area", "subject", "before",
-        "after", "note", "before_source", "after_source", "comparison_complete",
-    ]  # fmt: skip
+        "category",
+        "kind",
+        "gpo_guid",
+        "gpo_name",
+        "scope",
+        "area",
+        "subject",
+        "before",
+        "after",
+        "note",
+        "before_source",
+        "after_source",
+        "comparison_complete",
+    ]
     assert len(rows) == 1 + len(rich_report["differences"])
     assert all(len(row) == 13 for row in rows)
     assert {row[-1] for row in rows[1:]} == {"false"}
@@ -1191,7 +1612,7 @@ def test_csv_serialises_values_and_picks_the_source_side(rich_report: dict[str, 
         "before.xml Computer/Registry/Policy[0]",
         "mid x; after.jsonl line 9",
     ]
-    assert by_subject["OU=Servers,DC=corp,DC=example"][2:4] == ["", ""]
+    assert by_subject["corp.example/Servers"][2:4] == ["", ""]
 
 
 def test_csv_neutralises_formulas_and_keeps_full_values() -> None:

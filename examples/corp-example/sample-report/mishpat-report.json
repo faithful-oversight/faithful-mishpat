@@ -3,7 +3,7 @@
   "schema_version": "1.0",
   "tool": {
     "name": "mishpat",
-    "version": "0.0.0"
+    "version": "0.1.0"
   },
   "generated_at": "2026-11-09T12:00:00Z",
   "inputs": [
@@ -25,8 +25,8 @@
     "match": "guid"
   },
   "comparison": {
-    "before": "before",
-    "after": "after",
+    "before": "corp-before.jsonl",
+    "after": "corp-after.jsonl",
     "match": "guid",
     "complete": true
   },
@@ -77,7 +77,7 @@
           "name": "Member servers",
           "description": "Windows Server member servers",
           "identifier": "b6f2a1d4-5c37-4e80-9d12-7a4e3c8b0f56",
-          "query": "1;3;10;86;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE BuildNumber >= \"20348\" AND ProductType = \"3\";"
+          "query": "root\\CIMv2: SELECT * FROM Win32_OperatingSystem WHERE BuildNumber >= \"20348\" AND ProductType = \"3\""
         },
         "security_filtering": [
           {
@@ -182,7 +182,7 @@
           "name": "Windows clients",
           "description": "Windows 10 and Windows 11 computers",
           "identifier": "1d9e4b7a-8f25-4c63-a0b1-6e2d5f379c48",
-          "query": "1;3;10;83;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE \"10.%\" AND ProductType = \"1\";"
+          "query": "root\\CIMv2: SELECT * FROM Win32_OperatingSystem WHERE Version LIKE \"10.%\" AND ProductType = \"1\""
         },
         "security_filtering": [
           {
@@ -217,14 +217,15 @@
       "before": {
         "name": "Member servers",
         "description": "Windows Server member servers",
-        "query": "1;3;10;83;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE \"10.%\" AND ProductType = \"3\";"
+        "query": "root\\CIMv2: SELECT * FROM Win32_OperatingSystem WHERE Version LIKE \"10.%\" AND ProductType = \"3\""
       },
       "after": {
         "name": "Member servers",
         "description": "Windows Server member servers",
-        "query": "1;3;10;86;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE BuildNumber >= \"20348\" AND ProductType = \"3\";"
+        "query": "root\\CIMv2: SELECT * FROM Win32_OperatingSystem WHERE BuildNumber >= \"20348\" AND ProductType = \"3\""
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
@@ -250,6 +251,7 @@
         "enforced": false
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
@@ -271,17 +273,11 @@
       "subject": "Turn off Autoplay",
       "before": {
         "state": "Enabled",
-        "elements": [
-          {
-            "kind": "DropDownList",
-            "name": "Turn off Autoplay on:",
-            "state": "Enabled",
-            "value": "All drives"
-          }
-        ]
+        "Turn off Autoplay on:": "All drives"
       },
       "after": null,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
@@ -299,10 +295,10 @@
       "subject": "Disable Windows Error Reporting",
       "before": null,
       "after": {
-        "state": "Enabled",
-        "elements": []
+        "state": "Enabled"
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
@@ -320,51 +316,18 @@
       "subject": "Configure Automatic Updates",
       "before": {
         "state": "Enabled",
-        "elements": [
-          {
-            "kind": "DropDownList",
-            "name": "Configure automatic updating:",
-            "state": "Enabled",
-            "value": "3 - Auto download and notify for install"
-          },
-          {
-            "kind": "DropDownList",
-            "name": "Scheduled install day:",
-            "state": "Enabled",
-            "value": "0 - Every day"
-          },
-          {
-            "kind": "Numeric",
-            "name": "Scheduled install time:",
-            "state": "Enabled",
-            "value": 3
-          }
-        ]
+        "Configure automatic updating:": "3 - Auto download and notify for install",
+        "Scheduled install day:": "0 - Every day",
+        "Scheduled install time:": 3
       },
       "after": {
         "state": "Enabled",
-        "elements": [
-          {
-            "kind": "DropDownList",
-            "name": "Configure automatic updating:",
-            "state": "Enabled",
-            "value": "4 - Auto download and schedule the install"
-          },
-          {
-            "kind": "DropDownList",
-            "name": "Scheduled install day:",
-            "state": "Enabled",
-            "value": "0 - Every day"
-          },
-          {
-            "kind": "Numeric",
-            "name": "Scheduled install time:",
-            "state": "Enabled",
-            "value": 3
-          }
-        ]
+        "Configure automatic updating:": "4 - Auto download and schedule the install",
+        "Scheduled install day:": "0 - Every day",
+        "Scheduled install time:": 3
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
@@ -387,6 +350,7 @@
       "before": 1,
       "after": 3,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
@@ -409,6 +373,7 @@
       "before": 3,
       "after": null,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/gpreport.xml",
@@ -427,6 +392,7 @@
       "before": null,
       "after": 1,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/gpreport.xml",
@@ -448,6 +414,7 @@
         "data": " "
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/DomainSysvol/GPO/Machine/registry.pol",
@@ -469,6 +436,7 @@
       },
       "after": null,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/DomainSysvol/GPO/Machine/registry.pol",
@@ -490,6 +458,7 @@
         "data": 1
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-after.jsonl:{7E3D95A1-0F6C-48B2-8D17-A4C2E9B60F53}/DomainSysvol/GPO/Machine/registry.pol",
@@ -514,6 +483,7 @@
         "data": 4
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{0D84B6E1-C2A7-4F39-B5D0-7E9A1C3F8B26}/DomainSysvol/GPO/Machine/registry.pol",
@@ -534,8 +504,9 @@
       "area": "",
       "subject": "Edge Browser Policy",
       "before": null,
-      "after": null,
+      "after": "Edge Browser Policy",
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-after.jsonl:{9F05E6C2-D3A8-4B71-8E24-1C7B4A0D6E93}/gpreport.xml",
@@ -551,9 +522,10 @@
       "scope": "",
       "area": "",
       "subject": "Legacy Kiosk Lockdown",
-      "before": null,
+      "before": "Legacy Kiosk Lockdown",
       "after": null,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{1B7F4E90-A6D3-4C58-9E02-D8C3B5F7A164}/gpreport.xml",
@@ -572,6 +544,7 @@
       "before": "enabled",
       "after": "disabled",
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{58C0D3B7-E4A1-4296-B7F8-2A9E5D1C6403}/gpreport.xml",
@@ -596,6 +569,7 @@
       ],
       "after": null,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{58C0D3B7-E4A1-4296-B7F8-2A9E5D1C6403}/gpreport.xml",
@@ -624,6 +598,7 @@
         "enforced": false
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{58C0D3B7-E4A1-4296-B7F8-2A9E5D1C6403}/gpreport.xml",
@@ -646,6 +621,7 @@
       "before": "Workstation Baseline",
       "after": "Workstation Hardening",
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
@@ -668,6 +644,7 @@
       "before": null,
       "after": "applies",
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
@@ -696,6 +673,7 @@
         "enforced": true
       },
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
@@ -718,6 +696,7 @@
       "before": 10,
       "after": 5,
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
@@ -740,6 +719,9 @@
       "before": null,
       "after": 900,
       "note": "",
+      "labels": {
+        "900": "900 seconds"
+      },
       "sources": [
         {
           "file": "corp-after.jsonl:{2A8C1D64-B7E0-4F95-9A3B-6D5E8C0F1B47}/gpreport.xml",
@@ -758,6 +740,10 @@
       "before": 3,
       "after": 5,
       "note": "",
+      "labels": {
+        "3": "Send NTLMv2 response only",
+        "5": "Send NTLMv2 response only. Refuse LM & NTLM"
+      },
       "sources": [
         {
           "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
@@ -780,6 +766,9 @@
       "before": 1,
       "after": null,
       "note": "",
+      "labels": {
+        "1": "Enabled"
+      },
       "sources": [
         {
           "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
@@ -803,6 +792,10 @@
         "S-1-5-32-546"
       ],
       "note": "",
+      "labels": {
+        "S-1-5-113": "NT AUTHORITY\\Local account",
+        "S-1-5-32-546": "BUILTIN\\Guests"
+      },
       "sources": [
         {
           "file": "corp-before.jsonl:{F92E7A05-3D18-4B6C-8A41-C5B0E6D9273F}/gpreport.xml",
@@ -821,10 +814,11 @@
       "gpo_name": "",
       "scope": "",
       "area": "",
-      "subject": "OU=Web,OU=Servers,DC=corp,DC=example",
+      "subject": "corp.example/Servers/Web",
       "before": "not blocked",
       "after": "blocked",
       "note": "",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl",
@@ -843,7 +837,7 @@
       "gpo_name": "",
       "scope": "",
       "area": "",
-      "subject": "OU=Workstations,DC=corp,DC=example: link order",
+      "subject": "corp.example/Workstations: link order",
       "before": [
         "Workstation Hardening",
         "Staff Desktop Settings"
@@ -853,6 +847,7 @@
         "Workstation Hardening"
       ],
       "note": "Order among the GPOs linked here on both sides; added or removed links are listed under each GPO.",
+      "labels": {},
       "sources": [
         {
           "file": "corp-before.jsonl",

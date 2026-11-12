@@ -365,6 +365,36 @@ def parse_gplink(value: str) -> list[tuple[str, bool, bool]]:
     return links
 
 
+def wql(parm2: str) -> str:
+    r"""Write a WMI filter's ``msWMI-Parm2`` as its queries, one per line.
+
+    The attribute holds a count, then for each query the lengths of its language,
+    namespace and text followed by those three fields, all ``;``-separated, such as
+    ``1;3;10;45;WQL;root\\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE ...;``.
+    Each query is written as ``<namespace>: <query>``. Text that does not follow the
+    layout is returned unchanged, so nothing is lost.
+    """
+    try:
+        count, _, rest = parm2.partition(";")
+        queries = []
+        for _ in range(int(count)):
+            sizes = rest.split(";", 3)
+            lang, space, text = (int(part) for part in sizes[:3])
+            body = sizes[3]
+            fields = [body[:lang], body[lang + 1 : lang + 1 + space]]
+            start = lang + space + 2
+            fields.append(body[start : start + text])
+            if body[lang : lang + 1] != ";" or body[start - 1 : start] != ";":
+                return parm2
+            if body[start + text : start + text + 1] != ";" or min(lang, space, text) < 0:
+                return parm2
+            queries.append(f"{fields[1]}: {fields[2]}")
+            rest = body[start + text + 1 :]
+    except (ValueError, IndexError):
+        return parm2
+    return "\n".join(queries) if queries and not rest.strip() else parm2
+
+
 def som_path(dn: str, kind: str) -> str:
     """Write a scope's distinguished name as a report ``SOMPath``.
 
@@ -482,7 +512,7 @@ def _filter(entry: object, where: Source, result: _Structure, problems: list[Pro
     except BadLineError as exc:
         problems.append(Problem(where, f"A WMI filter was skipped: {exc}"))
         return
-    result.filters[identifier] = query
+    result.filters[identifier] = wql(query)
 
 
 def _apply_structure(gpos: list[Gpo], structure: _Structure) -> None:

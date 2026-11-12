@@ -28,6 +28,13 @@ Two changes are to organizational units and belong to no single GPO:
 - On the `Workstations` organizational unit, `Staff Desktop Settings` moves ahead of `Workstation Hardening` in link order.
 - The `Web` organizational unit turns on block inheritance.
 
+The report is written to be read, not decoded:
+
+- A policy that changed shows only the option that changed. `Configure Automatic Updates` shows its drop-down going from `3 - Auto download and notify for install` to `4 - Auto download and schedule the install`, not the whole policy.
+- Accounts and security option values carry their meaning. The user right shows `S-1-5-113 (NT AUTHORITY\Local account)`, and the LAN Manager authentication level shows `5 (Send NTLMv2 response only. Refuse LM & NTLM)`.
+- A WMI filter query reads as `namespace: query` instead of the raw directory attribute.
+- A created or deleted GPO shows its name on the side that has it. The organizational unit changes are in a `Domain structure` section, written as paths such as `corp.example/Workstations`.
+
 Open `sample-report/mishpat-report.html` in a browser to see the report. The report files are `mishpat-report.html`, `mishpat-report.md`, `mishpat-report.json`, `mishpat-differences.csv`, and `mishpat-manifest.json`.
 
 ### Regenerate the sample

@@ -165,6 +165,15 @@ def test_run_reads_both_sides_and_describes_the_inputs(tmp_path: Path) -> None:
     ]
 
 
+def test_run_names_the_comparison_sides_by_input_name(tmp_path: Path) -> None:
+    before = tmp_path / "before.xml"
+    before.write_bytes(fx.report_bytes(gpo()))
+    after = backup(tmp_path / "after-backup", state="Disabled")
+    comparison, _, inputs = pipeline.run(before, after)
+    assert (comparison.before, comparison.after) == ("before.xml", "after-backup")
+    assert [i.name for i in inputs] == [comparison.before, comparison.after]
+
+
 def test_run_reports_the_kind_of_each_input(tmp_path: Path) -> None:
     fx.write_tree(tmp_path / "bk", fx.backup_files(report=fx.report_bytes(gpo())))
     (tmp_path / "all.xml").write_bytes(fx.report_bytes(gpo(), wrapped=True))

@@ -93,20 +93,29 @@ def headline(report: Report) -> tuple[str, str]:
     """
     s = report["summary"]
     n, gpos = s["differences"], s["gpos_changed"]
-    if not n:
-        lead = "No differences"
-    elif not gpos:
-        lead = f"{_plural(n, 'difference')} in scope inheritance"
-    elif s["scope_differences"]:
-        lead = f"{_plural(n, 'difference')} across {_plural(gpos, 'GPO')} and scope inheritance"
+    alone = s["by_kind"].get("only-before", 0) + s["by_kind"].get("only-after", 0)
+    if alone:
+        lead, finish = _lead(n, gpos, s), f" ({_plural(alone, 'GPO')} in only one input)"
     else:
-        lead = f"{_plural(n, 'difference')} across {_plural(gpos, 'GPO')}"
+        lead, finish = _lead(n, gpos, s), ""
     if s["complete"]:
-        return "complete", f"{lead}. Every input was read in full."
+        return "complete", f"{lead}{finish}. Every input was read in full."
     problems = _plural(s["problems"], "problem")
     return "incomplete", (
-        f"{lead}. Incomplete: {problems} with an input, so differences may be missing."
+        f"{lead}{finish}. Incomplete: {problems} with an input, so differences may be missing."
     )
+
+
+def _lead(n: int, gpos: int, s: dict[str, Any]) -> str:
+    if not n:
+        return "No differences"
+    if not gpos:
+        return f"{_plural(n, 'difference')} in the domain's structure"
+    if s["scope_differences"]:
+        return (
+            f"{_plural(n, 'difference')} across {_plural(gpos, 'GPO')} and the domain's structure"
+        )
+    return f"{_plural(n, 'difference')} across {_plural(gpos, 'GPO')}"
 
 
 def value_text(value: Any) -> str:
@@ -129,7 +138,39 @@ def value_text(value: Any) -> str:
 def _scalar(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
-    return str(value) if value != "" else "(empty)"
+    if value == "":
+        return "(empty)"
+    text = str(value)
+    # Text that is only spaces would look empty, and edge spaces would vanish.
+    return f'"{text}"' if isinstance(value, str) and text != text.strip() else text
+
+
+def _sides(difference: dict[str, Any]) -> tuple[Any, Any]:
+    """The before and after values as a reader should see them.
+
+    When both are mappings, only the keys that differ are shown, so one changed
+    option of a policy does not hide among the rest. Values with recorded words,
+    such as a SID with its account name, are shown with the words beside them.
+    """
+    before, after = difference["before"], difference["after"]
+    if isinstance(before, dict) and isinstance(after, dict):
+        keys = [k for k in dict.fromkeys([*before, *after]) if before.get(k) != after.get(k)]
+        if keys and len(keys) < len(before.keys() | after.keys()):
+            before = {k: before.get(k) for k in keys}
+            after = {k: after.get(k) for k in keys}
+    labels = dict(difference.get("labels") or {})
+    return _labelled(before, labels), _labelled(after, labels)
+
+
+def _labelled(value: Any, labels: dict[str, str]) -> Any:
+    if not labels or value is None:
+        return value
+    if isinstance(value, list):
+        return [_labelled(item, labels) for item in value]
+    if isinstance(value, dict):
+        return value
+    words = labels.get(_scalar(value) if isinstance(value, bool) else str(value))
+    return f"{_scalar(value)} ({words})" if words else value
 
 
 def _nested(value: Any) -> str:
@@ -386,8 +427,8 @@ def _md_differences(diffs: list[dict[str, Any]], *, shorten: bool, level: int) -
             (
                 d["subject"],
                 WORDS[d["kind"]],
-                _shown(d["before"], shorten=shorten),
-                _shown(d["after"], shorten=shorten),
+                _shown(_sides(d)[0], shorten=shorten),
+                _shown(_sides(d)[1], shorten=shorten),
                 *((_shorten(d["note"], shorten=shorten),) if with_note else ()),
                 _sources_line(d),
             )
@@ -467,7 +508,7 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
     if len(sections) > _limit(MAX_GPOS, shorten):
         lines += [_md(_more(len(sections), _limit(MAX_GPOS, shorten), " GPOs")), ""]
     if scope_level:
-        lines += ["## Scope inheritance", ""]
+        lines += ["## Domain structure", ""]
         lines += _md_differences(scope_level, shorten=shorten, level=3)
     names = _names(report)
     if report["gaps"]:
@@ -637,8 +678,8 @@ def _h_differences(diffs: list[dict[str, Any]], *, shorten: bool, level: int) ->
             (
                 _h(d["subject"]),
                 _h(WORDS[d["kind"]]),
-                _hv(d["before"], shorten=shorten),
-                f'<span class="chg">{_hv(d["after"], shorten=shorten)}</span>',
+                _hv(_sides(d)[0], shorten=shorten),
+                f'<span class="chg">{_hv(_sides(d)[1], shorten=shorten)}</span>',
                 *((_h(_shorten(d["note"], shorten=shorten)),) if with_note else ()),
                 _h(_sources_line(d)),
             )
@@ -706,7 +747,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
         changes.append(f"<p>{_h(more)}</p>")
     scope = ""
     if scope_level:
-        scope = '<h2 id="scope">Scope inheritance</h2>' + _h_differences(
+        scope = '<h2 id="scope">Domain structure</h2>' + _h_differences(
             scope_level, shorten=shorten, level=3
         )
     names = _names(report)
@@ -749,7 +790,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
     nav = (
         ('<a href="#notices">Notices</a>' if notices else "")
         + '<a href="#gpos">GPOs compared</a><a href="#changes">Changes by GPO</a>'
-        + ('<a href="#scope">Scope inheritance</a>' if scope else "")
+        + ('<a href="#scope">Domain structure</a>' if scope else "")
         + ('<a href="#gaps">Not compared</a>' if gaps else "")
         + ('<a href="#problems">Problems</a>' if problems else "")
         + '<a href="#inputs">Inputs</a><a href="#limitations">Limitations</a>'

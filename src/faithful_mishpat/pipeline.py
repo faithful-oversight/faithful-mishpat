@@ -103,6 +103,7 @@ def run(
         raise UsageError(msg)
     sides = [read_side(before, "before"), read_side(after, "after")]
     result = compare(sides[0], sides[1], match=match)
+    result.before, result.after = display_name(before), display_name(after)
     inputs = [
         InputFile(display_name(path), str(side.context.get("kind", "")), size, digest)
         for path, side, (size, digest) in zip((before, after), sides, prints, strict=True)

@@ -306,6 +306,28 @@ def _policy_value(holder: ET.Element, kind: str) -> ValueData:
     return _scalar(text) if kind == "Numeric" else text
 
 
+def _policy_state(state: str, parts: list[dict[str, ValueData]]) -> dict[str, ValueData]:
+    """A policy's value: its state, then each option by the name the editor shows.
+
+    Options are keyed by name so a change to one option shows as that option alone.
+    An unnamed option uses its kind; a repeated name gets ``#2``, ``#3``.
+    """
+    value: dict[str, ValueData] = {"state": state}
+    for part in parts:
+        label = str(part["name"] or part["kind"])
+        if label.casefold() == "state":
+            label = f"{label} (option)"
+        base, count = label, 1
+        while label in value:
+            count += 1
+            label = f"{base} #{count}"
+        shown: ValueData = part["value"] if part["value"] is not None else part["state"]
+        if "options" in part:
+            shown = {"value": shown, "options": part["options"]}
+        value[label] = shown
+    return value
+
+
 def _policy(scope: _Scope, element: ET.Element) -> None:
     name = _text(element, "Name")
     if not name:
@@ -322,7 +344,7 @@ def _policy(scope: _Scope, element: ET.Element) -> None:
         kind="Policy",
         key=(category, name),
         title=name,
-        value={"state": _text(element, "State") or "", "elements": list(parts)},
+        value=_policy_state(_text(element, "State") or "", parts),
         context={
             "category": category,
             "explain": _text(element, "Explain") or "",
@@ -397,13 +419,16 @@ def _security_option(scope: _Scope, element: ET.Element) -> None:
             "display": _text(display, "DisplayString") or "",
             "units": _text(display, "Units") or "",
         }
+    value = _number_or_text(element, "SettingNumber", "SettingString")
+    if context.get("display"):
+        context[f"label:{value}"] = context["display"]
     scope.add(
         element,
         area="Security",
         kind="Security Option",
         key=(key,),
         title=title,
-        value=_number_or_text(element, "SettingNumber", "SettingString"),
+        value=value,
         context=context,
     )
 
@@ -414,6 +439,16 @@ def _members(element: ET.Element, local: str) -> tuple[list[str], list[str]]:
     ids = sorted({_sid_or_name(member) for member in found} - {""})
     names = sorted({_text(member, "Name", TYPES) or "" for member in found} - {""})
     return ids, names
+
+
+def _names_of(members: list[ET.Element]) -> dict[str, str]:
+    """``label:<sid>`` context entries naming each member, for reports to show."""
+    labels: dict[str, str] = {}
+    for member in members:
+        sid, name = _sid_or_name(member), _text(member, "Name", TYPES) or ""
+        if sid and name and name != sid:
+            labels[f"label:{sid}"] = name
+    return labels
 
 
 def _user_right(scope: _Scope, element: ET.Element) -> None:
@@ -429,7 +464,7 @@ def _user_right(scope: _Scope, element: ET.Element) -> None:
         key=(name,),
         title=name,
         value=list(ids),
-        context={"members": ", ".join(names)},
+        context={"members": ", ".join(names), **_names_of(_all(element, "Member"))},
     )
 
 

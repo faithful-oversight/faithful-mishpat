@@ -219,8 +219,10 @@ def test_link_order_is_compared_among_links_on_both_sides() -> None:
     swapped = side(*names, label="after", scopes={path: scope(path, OTHER, GUID)})
     (difference,) = compare(before, swapped).differences
     assert (difference.subject, difference.before, difference.after) == (
-        f"{path}: link order", ["Baseline - Servers", "Second"], ["Second", "Baseline - Servers"],
-    )  # fmt: skip
+        "corp.example/servers: link order",
+        ["Baseline - Servers", "Second"],
+        ["Second", "Baseline - Servers"],
+    )
     assert difference.gpo == ""
 
 
@@ -232,6 +234,106 @@ def test_blocked_inheritance() -> None:
     assert (difference.category, difference.before, difference.after) == (
         "inheritance", "not blocked", "blocked",
     )  # fmt: skip
+    assert difference.subject == "corp.example/servers"  # a SOMPath, as GPO links are written
+
+
+def test_scope_differences_use_the_path_form_for_each_kind_of_scope() -> None:
+    domain, site = (
+        "dc=corp,dc=example",
+        "cn=default-site,cn=sites,cn=configuration,dc=corp,dc=example",
+    )
+    nested = "ou=web,ou=servers,dc=corp,dc=example"
+    scopes = {
+        path: Scope(
+            path,
+            kind,
+            blocked=False,
+            links=((GUID, True, False), (OTHER, True, False)),
+            source=HERE,
+        )
+        for path, kind in ((domain, "domain"), (site, "site"), (nested, "ou"))
+    }
+    flipped = {
+        path: Scope(
+            path,
+            item.kind,
+            blocked=True,
+            links=((OTHER, True, False), (GUID, True, False)),
+            source=THERE,
+        )
+        for path, item in scopes.items()
+    }
+    names = (gpo(), gpo(OTHER, "Second"))
+    result = compare(side(*names, scopes=scopes), side(*names, label="after", scopes=flipped))
+    assert sorted(d.subject for d in result.differences) == [
+        "corp.example",
+        "corp.example/servers/web",
+        "corp.example/servers/web: link order",
+        "corp.example: link order",
+        "default-site",
+        "default-site: link order",
+    ]
+
+
+def test_gpo_added_and_removed_carry_the_name_as_the_side_that_has_it() -> None:
+    result = compare(
+        side(gpo(), whole=True), side(gpo(OTHER, "New one"), label="after", whole=True)
+    )
+    by_kind = {d.kind: d for d in result.differences}
+    removed, added = by_kind["removed"], by_kind["added"]
+    assert (removed.before, removed.after) == ("Baseline - Servers", None)
+    assert (added.before, added.after) == (None, "New one")
+    partial = compare(side(gpo()), side(gpo(OTHER, "New one"), label="after"))
+    alone = {d.kind: d for d in partial.differences}
+    assert (alone["only-before"].before, alone["only-before"].after) == ("Baseline - Servers", None)
+    assert (alone["only-after"].before, alone["only-after"].after) == (None, "New one")
+
+
+def test_a_renamed_gpo_still_shows_both_names() -> None:
+    after = gpo(name="Baseline - All servers")
+    (difference,) = compare(side(gpo()), side(after, label="after")).differences
+    assert (difference.before, difference.after) == ("Baseline - Servers", "Baseline - All servers")
+
+
+def labelled(title: str, value: Any, **context: str) -> Setting:
+    return replace(setting(title, value), context=context)
+
+
+def test_setting_differences_carry_the_words_recorded_beside_values() -> None:
+    before = gpo(settings=[labelled("Level", 3, **{"label:3": "Send LM & NTLM", "members": "x"})])
+    after = gpo(settings=[labelled("Level", 5, **{"label:5": "NTLMv2 only", "label:9": ""})])
+    (difference,) = compare(side(before), side(after, label="after")).differences
+    assert difference.labels == (
+        ("3", "Send LM & NTLM"),
+        ("5", "NTLMv2 only"),
+    )  # sorted; no empty words
+
+
+def test_labels_come_from_whichever_side_has_the_item_and_the_before_side_wins() -> None:
+    old = gpo(settings=[labelled("Rights", [ADMINS], **{f"label:{ADMINS}": "Domain Admins"})])
+    new = gpo(
+        settings=[
+            labelled(
+                "Rights",
+                [ADMINS, USERS],
+                **{f"label:{ADMINS}": "Renamed", f"label:{USERS}": "Users"},
+            )
+        ]
+    )
+    (changed,) = compare(side(old), side(new, label="after")).differences
+    assert changed.labels == ((USERS, "Users"), (ADMINS, "Domain Admins"))  # sorted by value
+    (added,) = compare(side(gpo(settings=[])), side(old, label="after")).differences
+    assert (added.kind, added.labels) == ("added", ((ADMINS, "Domain Admins"),))
+    (removed,) = compare(side(old), side(gpo(settings=[]), label="after")).differences
+    assert (removed.kind, removed.labels) == ("removed", ((ADMINS, "Domain Admins"),))
+
+
+def test_differences_without_recorded_words_have_no_labels() -> None:
+    after = gpo(settings=[setting("MinimumPasswordLength", 15)])
+    (difference,) = compare(side(gpo()), side(after, label="after")).differences
+    assert difference.labels == ()
+    assert all(d.labels == () for d in compare(side(gpo(), whole=True),
+               side(gpo(OTHER), label="after", whole=True)).differences)  # fmt: skip
 
 
 def test_registry_pol_values_need_backups_on_both_sides() -> None:

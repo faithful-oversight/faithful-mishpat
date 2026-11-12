@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from faithful_mishpat.differences import Comparison, Difference, Gap, Pair
 from faithful_mishpat.errors import UsageError
+from faithful_mishpat.formats.bundle import som_path
 
 if TYPE_CHECKING:
     from faithful_mishpat.model import (
@@ -71,7 +72,16 @@ def compare(before: Snapshot, after: Snapshot, *, match: str = "guid") -> Compar
         else:
             kind = "added" if whole else "only-after"
         result.differences.append(
-            Difference("gpo", kind, gpo.guid, gpo.name, gpo.name, sources=(gpo.source,))
+            Difference(
+                "gpo",
+                kind,
+                gpo.guid,
+                gpo.name,
+                gpo.name,
+                gpo.name if old is not None else None,
+                gpo.name if new is not None else None,
+                sources=(gpo.source,),
+            )
         )
         result.pairs.append(Pair(gpo.guid, gpo.name, kind, 1))
     _compare_scopes(before, after, result)
@@ -329,8 +339,20 @@ def _compare_settings(old: Gpo, new: Gpo, result: Comparison) -> None:
                 scope=setting.scope,
                 area=setting.area,
                 sources=sources,
+                labels=_labels(before, after),
             )
         )
+
+
+def _labels(*settings: Setting | None) -> tuple[tuple[str, str], ...]:
+    """Words readers recorded to show beside values (``label:<value>`` context)."""
+    found: dict[str, str] = {}
+    for setting in settings:
+        if setting is not None:
+            for key, words in setting.context.items():
+                if key.startswith("label:") and words:
+                    found.setdefault(key[len("label:") :], words)
+    return tuple(sorted(found.items()))
 
 
 def _by_identity(gpo: Gpo, result: Comparison) -> dict[tuple[str, ...], Setting]:
@@ -362,6 +384,7 @@ def _compare_scopes(before: Snapshot, after: Snapshot, result: Comparison) -> No
     for path in sorted(before.scopes.keys() & after.scopes.keys()):
         was, now = before.scopes[path], after.scopes[path]
         sources: tuple[Source, ...] = (was.source, now.source)
+        shown = som_path(now.path, now.kind)
         if was.blocked != now.blocked:
             value = ("blocked", "not blocked")
             result.differences.append(
@@ -370,7 +393,7 @@ def _compare_scopes(before: Snapshot, after: Snapshot, result: Comparison) -> No
                     "changed",
                     "",
                     "",
-                    now.path,
+                    shown,
                     value[not was.blocked],
                     value[not now.blocked],
                     sources=sources,
@@ -390,7 +413,7 @@ def _compare_scopes(before: Snapshot, after: Snapshot, result: Comparison) -> No
                     "changed",
                     "",
                     "",
-                    f"{now.path}: link order",
+                    f"{shown}: link order",
                     [names.get(g, g) for g in old_order],
                     [names.get(g, g) for g in new_order],
                     sources=sources,

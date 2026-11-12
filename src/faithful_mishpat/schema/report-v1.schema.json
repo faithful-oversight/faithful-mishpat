@@ -416,6 +416,7 @@
           "before",
           "after",
           "note",
+          "labels",
           "sources"
         ],
         "properties": {
@@ -468,6 +469,13 @@
           },
           "note": {
             "type": "string"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Words shown beside values, by the value as text: an account name beside a SID, or a security option's meaning beside its number. Never compared."
           },
           "sources": {
             "type": "array",
