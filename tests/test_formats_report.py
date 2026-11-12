@@ -67,7 +67,12 @@ def test_gpo_facts() -> None:
         "user directory": 1,
         "user sysvol": 1,
     }
-    assert gpo.context == {"created": "2026-01-02T03:04:05", "modified": "2026-02-03T04:05:06"}
+    assert gpo.context == {
+        "created": "2026-01-02T03:04:05",
+        "modified": "2026-02-03T04:05:06",
+        "evidence:computer settings": "read",
+        "evidence:user settings": "read",
+    }
     assert gpo.links == [Link("corp.example/Servers", enabled=True, enforced=False, order=None)]
     assert gpo.settings == []
     assert "registry.pol" not in gpo.context  # a report never holds Registry.pol values

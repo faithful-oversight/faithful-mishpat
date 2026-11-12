@@ -82,6 +82,10 @@ def test_one_folder_with_report_and_both_registry_pol_files(tmp_path: Path) -> N
         "modified": "2026-02-03T04:05:06",
         "read from": "backup",
         "registry.pol": "read",
+        "evidence:computer settings": "read",
+        "evidence:user settings": "read",
+        "evidence:computer registry.pol": "read",
+        "evidence:user registry.pol": "read",
         "backup id": BACKUP_A,
         "backup time": "2026-03-04T05:06:07",
         "backup comment": "before the change",
@@ -131,7 +135,8 @@ def test_a_folder_named_like_a_file_is_not_that_file(tmp_path: Path) -> None:
     files = backup_files(report=None)
     files["gpreport.xml/inner.txt"] = b"x"
     result = read_folder(tmp_path, files)
-    assert "gpreport.xml missing" in result.problems[0].reason
+    assert [p.reason for p in result.problems][:1] == ["gpreport.xml is a folder, not a file"]
+    assert result.gpos[0].context["evidence:computer settings"] == "unreadable"
 
 
 # --- a root with many ---------------------------------------------------------------------
@@ -477,8 +482,9 @@ def test_a_skipped_link_makes_the_read_incomplete(
     )
     result = read_folder(tmp_path, files)
     assert [(p.source.detail, p.reason) for p in result.problems] == [
-        (linked, "is a link or a special file; mishpat does not follow or read it")
+        (".", f"{linked} is a link or a special file, which mishpat does not read")
     ]
+    assert result.gpos[0].context["evidence:computer registry.pol"] == "unreadable"
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
@@ -489,7 +495,7 @@ def test_a_named_pipe_is_skipped_not_read(tmp_path: Path) -> None:
     pipe.unlink()
     os.mkfifo(pipe)
     result = read_backups(FolderTree(tmp_path), "in")
-    assert any(p.reason.startswith("is a link or a special file") for p in result.problems)
+    assert any("is a link or a special file" in p.reason for p in result.problems)
     with pytest.raises(TreeError, match="is a link or a special file"):
         FolderTree(tmp_path).read(pipe.relative_to(tmp_path).as_posix())
 

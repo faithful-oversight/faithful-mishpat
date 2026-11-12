@@ -22,6 +22,7 @@ mishpat compares what the inputs record. An input that does not record something
 
 - **Get-GPOReport files and Backup-GPO folders** do not record link order, blocked inheritance, or the WMI filter query. mishpat compares those only when both inputs are export bundles. [Input formats](formats.md#what-each-input-records) has the full table.
 - **Links come from each GPO's own report.** A report lists the scopes a GPO is linked to. It does not list the other GPOs linked there, so it cannot give order.
+- **Link order is read from the position in `gPLink`**, with the last entry as link order 1. This has not been checked against GPMC on a real directory. See [Input formats](formats.md#structure-line).
 - **Link order is compared by GUID.** With `--match name`, a GPO that has a different GUID on each side is not part of the link order comparison. mishpat still compares its links GPO by GPO. See [Pairing by name](#pairing-by-name).
 - **A scope that exists in one bundle only is not compared.** An organizational unit or site that is new or deleted gives no scope difference and no gap. The links of the GPOs to it still show as link differences.
 - **Only the domain, organizational units, and sites are read.** These are the places that hold links in a bundle.

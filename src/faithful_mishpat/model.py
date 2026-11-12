@@ -232,3 +232,15 @@ class Snapshot:
     domain_wide: bool = False
     problems: list[Problem] = field(default_factory=list)
     context: dict[str, Any] = field(default_factory=dict)
+
+
+def evidence_key(scope: str, *, raw: bool = False) -> str:
+    """Return the :attr:`Gpo.context` key that says whether one source of settings was read.
+
+    Readers set ``evidence:computer settings`` and ``evidence:user settings`` for the
+    settings in a report, and ``evidence:computer registry.pol`` and ``evidence:user
+    registry.pol`` for Registry.pol values, to ``read`` or ``unreadable``. A setting in
+    one input only is a difference only when its source was read on both sides; a GPO
+    with no such key (one built by hand) counts as read.
+    """
+    return f"evidence:{scope.casefold()} {'registry.pol' if raw else 'settings'}"

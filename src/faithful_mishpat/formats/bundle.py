@@ -316,7 +316,7 @@ def _file(value: dict[str, Any]) -> tuple[str, bytes]:
         raise BadLineError(msg)
     try:
         data = base64.b64decode(encoded, validate=True)
-    except binascii.Error:
+    except (binascii.Error, ValueError):  # ValueError: text that is not ASCII
         msg = "data is not base64"
         raise BadLineError(msg) from None
     if len(data) != size:
@@ -466,6 +466,7 @@ class _Structure:
     scopes: dict[str, Scope] = field(default_factory=dict)
     paths: dict[str, str] = field(default_factory=dict)
     filters: dict[str, str] = field(default_factory=dict)
+    conflicting: set[str] = field(default_factory=set)
 
 
 def _read_structure(value: object, name: str, problems: list[Problem]) -> _Structure | None:
@@ -558,7 +559,22 @@ def _filter(entry: object, where: Source, result: _Structure, problems: list[Pro
     except BadLineError as exc:
         problems.append(Problem(where, f"A WMI filter was skipped: {exc}"))
         return
-    result.filters[identifier] = wql(query)
+    text = wql(query)
+    if identifier in result.conflicting:
+        return
+    if identifier in result.filters and result.filters[identifier] != text:
+        # Choosing either record could hide a change, so the query is left unknown.
+        del result.filters[identifier]
+        result.conflicting.add(identifier)
+        problems.append(
+            Problem(
+                where,
+                f"The WMI filter {identifier} appears twice with different queries; "
+                "its query was not compared",
+            )
+        )
+        return
+    result.filters[identifier] = text
 
 
 def _apply_structure(gpos: list[Gpo], structure: _Structure) -> None:

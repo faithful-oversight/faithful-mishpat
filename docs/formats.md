@@ -126,7 +126,7 @@ A root that holds two backups of the same GPO is ambiguous, and mishpat refuses 
 
 ### What mishpat reads
 
-mishpat reads four files and ignores the rest. It looks up names without regard to case. It does not follow links or read special files such as named pipes; each one it meets is listed as a problem, so the report does not claim the input was read in full.
+mishpat reads four files and ignores the rest. It looks up names without regard to case, as Windows does; when two names differ only in case, or a file and a folder share a name, it cannot tell which Windows would use, so it reports a problem instead of choosing. It does not follow links or read special files such as named pipes; each one it meets is listed as a problem, so the report does not claim the input was read in full.
 
 | File | What mishpat takes from it |
 | --- | --- |
@@ -168,7 +168,7 @@ mishpat compares `Registry.pol` values only when both inputs are backups or bund
 
 ## Settings
 
-Every setting has a scope (`Computer`, `User`, or none), an area, a kind, a key, a title, and a value. Two settings with the same scope, area, kind, and key, compared without regard to case, are the same setting. The value is what mishpat compares. A list that is a set, such as the members of a user right, is sorted first, so a new order alone is not a change.
+Every setting has a scope (`Computer`, `User`, or none), an area, a kind, a key, a title, and a value. In an item's value, an attribute in a namespace is written `@{uri}name`, so the prefix a file happens to use never matters and two namespaces never collide; only XML Schema instance attributes such as `xsi:type` are left out. Two settings with the same scope, area, kind, and key, compared without regard to case, are the same setting. The value is what mishpat compares. A list that is a set, such as the members of a user right, is sorted first, so a new order alone is not a change.
 
 | Area and kind | Key | Value |
 | --- | --- | --- |
@@ -281,7 +281,9 @@ One line holds the structure of the domain:
 
 Each list holds at most 100,000 entries. A second structure line is not used, and mishpat records a problem.
 
-mishpat reads the `gPLink` attribute as [MS-GPOL] defines it. Each link is `[LDAP://cn={GUID},...;options]`. Bit 1 of the options turns the link off. Bit 2 enforces it. The last entry in the string has link order 1. mishpat gives each link its order from that, and takes enabled and enforced from the directory. It adds a link that the directory lists and the GPO's report does not. It writes each link target in the form a report uses, such as `corp.example/Servers`, so a bundle and a report file compare. A site is written as its name.
+mishpat reads the `gPLink` attribute with the syntax [MS-GPOL] defines. Each link is `[LDAP://cn={GUID},...;options]`. Bit 1 of the options turns the link off. Bit 2 enforces it.
+
+The last entry in the string is taken to have link order 1, the highest precedence. [MS-GPOL] defines the list and its syntax but not, in words this release could rely on, how a position maps to the link order GPMC shows, and Microsoft's prose example is not consistent with its own explanation. The reading follows how GPMC writes the attribute: a new link is added at the start of the string and gets the highest link order number. <!-- TODO(verify): in a lab, link three GPOs to one OU, compare the raw gPLink with GPMC and Get-GPInheritance, then reorder, insert, disable and enforce links and check again. --> It has not been checked against a real directory in this release, so treat a reported link-order change as something to confirm in GPMC. The bundle keeps the raw `gPLink`, so a correction needs no new export. mishpat gives each link its order from that, and takes enabled and enforced from the directory. It adds a link that the directory lists and the GPO's report does not. It writes each link target in the form a report uses, such as `corp.example/Servers`, so a bundle and a report file compare. A site is written as its name.
 
 Each `gaps` entry becomes a problem, `WHAT was not read: REASON`, and the comparison is incomplete.
 

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 from faithful_mishpat.differences import Comparison, Difference, Gap, Pair
 from faithful_mishpat.errors import UsageError
 from faithful_mishpat.formats.bundle import som_path
+from faithful_mishpat.model import evidence_key
 
 if TYPE_CHECKING:
     from faithful_mishpat.model import (
@@ -320,6 +321,7 @@ def _compare_settings(old: Gpo, new: Gpo, result: Comparison) -> None:
     if not compare_raw and (raw_read[0] or raw_read[1]):
         reason = "Registry.pol values are compared only when both inputs are backups read in full"
         result.gaps.append(Gap("Registry.pol values", reason, new.guid))
+    unknown: set[str] = set()
     for identity in sorted(was.keys() | now.keys()):
         if identity[1] in raw and not compare_raw:
             continue
@@ -328,6 +330,11 @@ def _compare_settings(old: Gpo, new: Gpo, result: Comparison) -> None:
             continue
         setting = after or before
         assert setting is not None  # noqa: S101 - one side has it
+        if before is None or after is None:
+            key = evidence_key(setting.scope, raw=identity[1] in raw)
+            if not (_known(old, key) and _known(new, key)):
+                unknown.add(key)  # absent from a side whose source was not read
+                continue
         kind = "added" if before is None else "removed" if after is None else "changed"
         sources = tuple(s.source for s in (before, after) if s is not None)
         result.differences.append(
@@ -343,6 +350,25 @@ def _compare_settings(old: Gpo, new: Gpo, result: Comparison) -> None:
                 area=setting.area,
                 sources=sources,
                 labels=_labels(before, after),
+            )
+        )
+    _unknown_gaps(unknown, new, result)
+
+
+def _known(gpo: Gpo, key: str) -> bool:
+    return gpo.context.get(key, "read") == "read"
+
+
+def _unknown_gaps(keys: set[str], gpo: Gpo, result: Comparison) -> None:
+    for key in sorted(keys):
+        half, _, source = key.removeprefix("evidence:").partition(" ")
+        what = "Registry.pol values" if source == "registry.pol" else "settings"
+        result.gaps.append(
+            Gap(
+                f"{half.capitalize()} {what} in one input only",
+                "they were not read in full on the other side, so they are not listed as added "
+                "or removed",
+                gpo.guid,
             )
         )
 

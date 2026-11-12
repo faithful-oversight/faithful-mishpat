@@ -58,6 +58,7 @@ from faithful_mishpat.model import (
     Trustee,
     ValueData,
     WmiFilter,
+    evidence_key,
 )
 
 if TYPE_CHECKING:
@@ -172,6 +173,18 @@ def _sid_or_name(element: ET.Element) -> str:
     return sid.upper() if sid else (_text(element, "Name", TYPES) or "")
 
 
+_XSI_PREFIX = "{http://www.w3.org/2001/XMLSchema-instance}"
+
+
+def _attribute_name(key: str) -> str:
+    """Return an attribute's local name, without its ``{uri}``."""
+    return key.rpartition("}")[2]
+
+
+def _json(value: ValueData) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
 def canonical(
     element: ET.Element,
     *,
@@ -180,30 +193,33 @@ def canonical(
 ) -> ValueData:
     """Return an element's content as plain data: attributes, text and children.
 
-    Namespaces are dropped from names, attributes are ``@name``, text beside children is
-    ``#text``, repeated children are lists (sorted for the names in ``sort``), and
-    ``xsi:nil`` is ``None``. The ignored names (see the module documentation) and the
-    attribute names in ``drop`` are left out. SIDs are upper case. Stored passwords
-    (``cpassword``) are replaced by :func:`faithful_mishpat.formats.hidden.hide`.
+    Namespaces are dropped from element names. Attributes are ``@name``, or
+    ``@{uri}name`` for an attribute in a namespace, so a prefix never matters and two
+    namespaces never collide; only XML Schema instance attributes are left out. Text
+    beside children is ``#text``, repeated children are lists (sorted for the names in
+    ``sort``), and ``xsi:nil`` is ``None``. The ignored names (see the module
+    documentation) and the attribute names in ``drop`` are left out. SIDs are upper
+    case. A stored password (``cpassword``), as an attribute or as a whole element of
+    any shape, is replaced by :func:`faithful_mishpat.formats.hidden.hide`.
     """
     if element.get(_XSI_NIL) == "true":
         return None
     text = _clean(element.text)
     attributes = {
-        k: v for k, v in element.attrib.items() if not k.startswith("{") and k not in drop
+        k: v for k, v in element.attrib.items() if not k.startswith(_XSI_PREFIX) and k not in drop
     }
     children: dict[str, list[ValueData]] = {}
     for child in element:
         name = _local(child)
         if name not in _IGNORED:
             item = canonical(child, drop=drop, sort=sort)
-            if hidden.is_hidden_name(name) and isinstance(item, str):
-                item = hidden.hide(item)
+            if hidden.is_hidden_name(name) and item is not None:
+                item = hidden.hide(item if isinstance(item, str) else _json(item))
             children.setdefault(name, []).append(item)
     if not attributes and not children:
         return text
     out: dict[str, ValueData] = {
-        f"@{k}": hidden.hide(v) if hidden.is_hidden_name(k) else _clean(v)
+        f"@{k}": hidden.hide(v) if hidden.is_hidden_name(_attribute_name(k)) else _clean(v)
         for k, v in sorted(attributes.items())
     }
     if text:
@@ -922,10 +938,20 @@ def _gpo(element: ET.Element, base: Source, problems: list[Problem]) -> Gpo:
     gpo.user_enabled = _enabled(halves["User"])
     for scope_name, half in halves.items():
         gpo.versions.update(_versions(half, scope_name, base, problems))
-        if half is not None:
-            scope = _Scope(scope_name, base, problems)
-            _read_half(scope, half)
-            gpo.settings.extend(scope.settings)
+        if half is None:
+            # Get-GPOReport always writes both halves; without one, its settings are unknown.
+            gpo.context[evidence_key(scope_name)] = "unreadable"
+            where = Source(base.file, f"{base.detail} {scope_name}".strip())
+            problems.append(
+                Problem(
+                    where, f"the report has no {scope_name} section; its settings were not compared"
+                )
+            )
+            continue
+        gpo.context[evidence_key(scope_name)] = "read"
+        scope = _Scope(scope_name, base, problems)
+        _read_half(scope, half)
+        gpo.settings.extend(scope.settings)
     gpo.settings = _dedupe(gpo.settings)
     return gpo
 

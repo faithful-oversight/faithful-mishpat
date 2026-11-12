@@ -46,7 +46,7 @@ from faithful_mishpat.errors import InputError
 from faithful_mishpat.formats import xmlsafe
 from faithful_mishpat.formats.registrypol import read_registry_pol
 from faithful_mishpat.formats.report import read_report
-from faithful_mishpat.model import Gpo, Problem, Source, WmiFilter
+from faithful_mishpat.model import Gpo, Problem, Source, WmiFilter, evidence_key
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -175,11 +175,42 @@ def _join(*parts: str) -> str:
 
 
 def _lookup(tree: Tree, folder: str, name: str, *, want_folder: bool) -> str | None:
-    """Find ``name`` in ``folder`` without regard to case; return its path or ``None``."""
-    for entry, is_folder in tree.entries(folder):
-        if is_folder == want_folder and entry.casefold() == name.casefold():
-            return _join(folder, entry)
-    return None
+    """Find ``name`` in ``folder`` as Windows would, without regard to case.
+
+    Returns its path, or ``None`` when nothing has that name.
+
+    Raises:
+        TreeError: Windows could not tell the candidates apart (two names that differ
+            only in case, or a file and a folder of one name), the one found is a file
+            where a folder is wanted or the reverse, or it is a link or special file
+            that a folder listing skipped. Choosing one would hide the other.
+    """
+    wanted = name.casefold()
+    found = [
+        (entry, is_folder)
+        for entry, is_folder in tree.entries(folder)
+        if entry.casefold() == wanted
+    ]
+    skipped = [
+        path
+        for path in getattr(tree, "skipped", ())
+        if path.rpartition("/")[0] == folder and path.rpartition("/")[2].casefold() == wanted
+    ]
+    where = _join(folder, name)
+    if len(found) + len(skipped) > 1:
+        msg = f"{where}: names that differ only in case are ambiguous on Windows"
+        raise TreeError(msg)
+    if skipped:
+        msg = f"{skipped[0]} is a link or a special file, which mishpat does not read"
+        raise TreeError(msg)
+    if not found:
+        return None
+    entry, is_folder = found[0]
+    if is_folder != want_folder:
+        kinds = ("file", "folder")
+        msg = f"{_join(folder, entry)} is a {kinds[is_folder]}, not a {kinds[want_folder]}"
+        raise TreeError(msg)
+    return _join(folder, entry)
 
 
 def _resolve(tree: Tree, folder: str, *names: str) -> str | None:
@@ -274,8 +305,12 @@ def _guid(text: str) -> str | None:
         return None
 
 
+_DECIMAL = re.compile(r"[0-9]{1,10}")
+
+
 def _int(text: str | None) -> int | None:
-    return int(text) if text and text.isdigit() else None
+    """Read a small decimal number; anything else, such as ``²`` or 400 digits, is ``None``."""
+    return int(text) if text and _DECIMAL.fullmatch(text) else None
 
 
 def _wmi(core: dict[str, str], *, known: bool) -> WmiFilter | str | None:
@@ -324,7 +359,11 @@ def _with_filter_id(gpo: Gpo, core: dict[str, str]) -> None:
 
 
 def _report_gpo(reader: _Reader, folder: str, guid: str) -> Gpo | None:
-    path = _resolve(reader.tree, folder, "gpreport.xml")
+    try:
+        path = _resolve(reader.tree, folder, "gpreport.xml")
+    except TreeError as exc:
+        reader.problem(folder, str(exc))
+        path = None
     where = "gpreport.xml missing"
     if path is not None:
         where = "gpreport.xml could not be used"
@@ -344,22 +383,28 @@ def _report_gpo(reader: _Reader, folder: str, guid: str) -> Gpo | None:
 
 
 def _registry_pol(reader: _Reader, folder: str, gpo: Gpo) -> None:
-    ok = True
     for scope, half in (("Computer", "Machine"), ("User", "User")):
+        gpo.context[evidence_key(scope, raw=True)] = _registry_half(
+            reader, folder, gpo, scope, half
+        )
+    halves = (gpo.context[evidence_key(s, raw=True)] for s in ("Computer", "User"))
+    gpo.context["registry.pol"] = "read" if all(h == "read" for h in halves) else "unreadable"
+
+
+def _registry_half(reader: _Reader, folder: str, gpo: Gpo, scope: str, half: str) -> str:
+    """Read one half's registry.pol; say ``read`` (in full, or absent) or ``unreadable``."""
+    try:
         path = _resolve(reader.tree, folder, "DomainSysvol", "GPO", half, "registry.pol")
         if path is None:
-            continue
-        try:
-            data = reader.tree.read(path)
-        except TreeError as exc:
-            reader.problem(path, str(exc))
-            ok = False
-            continue
-        result = read_registry_pol(data, scope, reader.source(path))
-        gpo.settings.extend(result.settings)
-        reader.problems.extend(result.problems)
-        ok = ok and result.ok
-    gpo.context["registry.pol"] = "read" if ok else "unreadable"
+            return "read"  # no file: this half sets no values
+        data = reader.tree.read(path)
+    except TreeError as exc:
+        reader.problem(folder, str(exc))
+        return "unreadable"
+    result = read_registry_pol(data, scope, reader.source(path))
+    gpo.settings.extend(result.settings)
+    reader.problems.extend(result.problems)
+    return "read" if result.ok else "unreadable"
 
 
 def _read_one(reader: _Reader, folder: str) -> Gpo | None:
@@ -376,6 +421,8 @@ def _read_one(reader: _Reader, folder: str) -> Gpo | None:
     gpo = _report_gpo(reader, folder, guid)
     if gpo is None:
         gpo = _from_core(guid, info, core, known=bool(core), source=reader.source(folder))
+        for scope in ("Computer", "User"):
+            gpo.context[evidence_key(scope)] = "unreadable"
     else:
         _with_filter_id(gpo, core)
     gpo.context["read from"] = reader.origin
@@ -418,7 +465,11 @@ def read_backups(
     result = BackupRead()
     seen: dict[str, str] = {}
     for folder in folders:
-        gpo = _read_one(reader, folder)
+        try:
+            gpo = _read_one(reader, folder)
+        except TreeError as exc:  # a folder that cannot be listed, or an ambiguous name
+            reader.problem(folder, f"the backup was not read: {exc}")
+            continue
         if gpo is None:
             continue
         if gpo.guid in seen:
@@ -427,7 +478,9 @@ def read_backups(
             raise InputError(msg)
         seen[gpo.guid] = folder
         result.gpos.append(gpo)
+    said = " ".join(p.reason for p in reader.problems)
     for path in sorted(set(getattr(tree, "skipped", ()))):
-        reader.problem(path, "is a link or a special file; mishpat does not follow or read it")
+        if path not in said:  # not already named by the lookup that met it
+            reader.problem(path, "is a link or a special file; mishpat does not follow or read it")
     result.problems = reader.problems
     return result
