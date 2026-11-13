@@ -364,6 +364,7 @@ def test_a_folder_that_cannot_be_listed_is_a_problem(
 
 
 def _pair(tmp_path: Path, before: str, after: str) -> tuple[dict[str, Any], str]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "a.xml").write_bytes(report_bytes(gpo_xml(computer=extension("Misc", before))))
     (tmp_path / "b.xml").write_bytes(report_bytes(gpo_xml(computer=extension("Misc", after))))
     _, report, texts = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
@@ -456,3 +457,118 @@ def test_a_skip_in_one_half_leaves_the_other_half_and_registry_pol_compared(
         d["scope"] == "Computer" and d["area"] != "Registry.pol" and d["kind"] == "removed"
         for d in report["differences"]
     )
+
+
+# --- final recheck: C1 nothing inside a password element may name a setting --------------
+
+CANDIDATES = [
+    "<q1:Name>{p}</q1:Name>",
+    "<q1:Id>{p}</q1:Id>",
+    '<q1:x name="{p}"/>',
+]
+ROOT_ATTRIBUTES = ["Name", "name", "Id", "id", "Type", "type"]
+
+
+def _root(secret: str, form: str) -> str:
+    if form.startswith("@"):
+        return f'<q1:cpassword {form[1:]}="{secret}">v</q1:cpassword>'
+    return f"<q1:cpassword>{form.format(p=secret)}</q1:cpassword>"
+
+
+@pytest.mark.parametrize("form", [*CANDIDATES, *(f"@{a}" for a in ROOT_ATTRIBUTES)])
+def test_nothing_inside_a_password_element_names_its_setting(tmp_path: Path, form: str) -> None:
+    report, texts = _pair(tmp_path, _root(PROBE + "-A", form), _root(PROBE + "-B", form))
+    assert PROBE not in texts
+    assert "mishpat-hidden" not in texts
+    assert [(d["category"], d["kind"]) for d in report["differences"]] == [("setting", "changed")]
+    assert "A stored password changed" in report["differences"][0]["note"]
+
+
+def test_several_password_elements_change_unchanged_and_reordered(tmp_path: Path) -> None:
+    one, two = _root(PROBE + "-1", CANDIDATES[0]), _root(PROBE + "-2", CANDIDATES[0])
+    three = _root(PROBE + "-3", CANDIDATES[0])
+    report, texts = _pair(tmp_path / "reorder", one + two, two + one)
+    assert PROBE not in texts
+    assert [d for d in report["differences"] if d["category"] == "setting"] == []
+    report, texts = _pair(tmp_path / "change", one + two, one + three)
+    assert PROBE not in texts
+    assert [(d["category"], d["kind"]) for d in report["differences"]] == [("setting", "changed")]
+
+
+def test_a_password_element_in_a_preferences_collection_is_opaque(tmp_path: Path) -> None:
+    def body(secret: str) -> str:
+        return (
+            '<q1:Things clsid="{C}"><q1:Collection clsid="{K}" name="group">'
+            f'<q1:cpassword clsid="{{D}}" name="{secret}" uid="{{U}}">x</q1:cpassword>'
+            "</q1:Collection></q1:Things>"
+        )
+
+    report, texts = _pair(tmp_path, body(PROBE + "-A"), body(PROBE + "-B"))
+    assert PROBE not in texts
+    assert [(d["category"], d["kind"]) for d in report["differences"]] == [("setting", "changed")]
+
+
+# --- C2: a section that should appear once is not chosen by position ---------------------
+
+
+def _half(text: str, name: str) -> str:
+    return text[text.index(f"<{name}>") : text.index(f"</{name}>") + len(f"</{name}>")]
+
+
+@pytest.mark.parametrize("name", ["Computer", "User"])
+@pytest.mark.parametrize("first", ["Enabled", "Disabled"])
+def test_two_different_halves_are_not_chosen_by_order(
+    tmp_path: Path, name: str, first: str
+) -> None:
+    second = "Disabled" if first == "Enabled" else "Enabled"
+
+    def gpo(state: str) -> str:
+        ext = registry_ext(policy("Critical setting", state))
+        return gpo_xml(computer=ext) if name == "Computer" else gpo_xml(user=ext)
+
+    doubled = gpo(first).replace(f"</{name}>", f"</{name}>" + _half(gpo(second), name), 1)
+    (tmp_path / "a.xml").write_bytes(report_bytes(gpo("Enabled")))
+    (tmp_path / "b.xml").write_bytes(report_bytes(doubled))
+    _, report, _ = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
+    assert [d for d in report["differences"] if d["category"] == "setting"] == []
+    assert report["comparison"]["complete"] is False
+    assert any(
+        f"{name} appears more than once with different contents" in p["reason"]
+        for p in report["problems"]
+    )
+
+
+def test_an_identical_repeated_half_is_read_once(tmp_path: Path) -> None:
+    plain = gpo_xml(computer=registry_ext(policy("Critical setting", "Enabled")))
+    doubled = plain.replace("</Computer>", "</Computer>" + _half(plain, "Computer"), 1)
+    changed = gpo_xml(computer=registry_ext(policy("Critical setting", "Disabled")))
+    changed = changed.replace("</Computer>", "</Computer>" + _half(changed, "Computer"), 1)
+    (tmp_path / "a.xml").write_bytes(report_bytes(doubled))
+    (tmp_path / "b.xml").write_bytes(report_bytes(changed))
+    _, report, _ = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
+    assert report["problems"] == []
+    assert [(d["category"], d["kind"]) for d in report["differences"]] == [("setting", "changed")]
+
+
+def test_a_half_with_two_different_enabled_flags_is_not_compared(tmp_path: Path) -> None:
+    plain = gpo_xml(computer=registry_ext(policy("Critical setting")))
+    start = plain.index("<Computer>")
+    doubled = plain[:start] + plain[start:].replace(
+        "<Enabled>true</Enabled>", "<Enabled>true</Enabled><Enabled>false</Enabled>", 1
+    )
+    assert doubled != plain
+    (tmp_path / "a.xml").write_bytes(report_bytes(plain))
+    (tmp_path / "b.xml").write_bytes(report_bytes(doubled))
+    _, report, _ = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
+    assert report["comparison"]["complete"] is False
+    assert not [d for d in report["differences"] if d["category"] in {"setting", "status"}]
+
+
+def test_one_link_listed_twice_differently_is_not_compared(tmp_path: Path) -> None:
+    on = ("Servers", "corp.example/Servers", True, False)
+    off = ("Servers", "corp.example/Servers", False, False)
+    (tmp_path / "a.xml").write_bytes(report_bytes(gpo_xml(links=(on,))))
+    (tmp_path / "b.xml").write_bytes(report_bytes(gpo_xml(links=(on, off))))
+    _, report, _ = run(tmp_path, tmp_path / "a.xml", tmp_path / "b.xml")
+    assert [d for d in report["differences"] if d["category"] == "link"] == []
+    assert any("listed twice with different settings" in p["reason"] for p in report["problems"])

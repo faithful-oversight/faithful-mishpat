@@ -274,6 +274,32 @@ class _Scope:
     problems: list[Problem]
     settings: list[Setting] = field(default_factory=list)
     scripts: dict[str, list[dict[str, ValueData]]] = field(default_factory=dict)
+    # Stored-password elements met where a setting would start, by (area, kind, key).
+    hidden: dict[tuple[str, str, tuple[str, ...]], list[ET.Element]] = field(default_factory=dict)
+
+    def keep_hidden(self, element: ET.Element, area: str, key: tuple[str, ...] = ()) -> None:
+        """Set aside a stored-password element; nothing inside it may name a setting."""
+        self.hidden.setdefault((area, _local(element), key), []).append(element)
+
+    def finish_hidden(self) -> None:
+        """Add one setting per group of stored-password elements.
+
+        Its identity uses only the area, the element name and a path of collection names,
+        never anything inside the elements. Its value is the sorted fingerprints of all of
+        them, so a change to any is found and an order change is not.
+        """
+        for (area, kind, key), elements in sorted(self.hidden.items(), key=lambda i: i[0]):
+            fingerprints: list[ValueData] = []
+            fingerprints.extend(sorted(_hidden_element(e) for e in elements))
+            self.add(
+                elements[0],
+                area=area,
+                kind=kind,
+                key=key,
+                title=kind,
+                value=fingerprints,
+            )
+        self.hidden.clear()
 
     def source(self, tail: str, local: str, title: str) -> Source:
         detail = f"{self.name}/{tail}/{local}[{title}]"
@@ -734,7 +760,9 @@ def _gpp_walk(
         local = _local(child)
         if local in _GPP_SKIPPED:
             continue
-        if local == "Collection":
+        if hidden.is_hidden_name(local):
+            prefs.scope.keep_hidden(child, prefs.area, path)
+        elif local == "Collection":
             holder = _find(child, "Filters")
             inner = [*filters, canonical(holder) if holder is not None else ""]
             _gpp_walk(prefs, child, (*path, child.get("name", "")), inner)
@@ -805,6 +833,9 @@ def _read_half(scope: _Scope, half: ET.Element) -> None:
     for child in children:
         totals[(_ns(child), _local(child))] = totals.get((_ns(child), _local(child)), 0) + 1
     for child in children:
+        if hidden.is_hidden_name(_local(child)):
+            scope.keep_hidden(child, _tail(_ns(child)))
+            continue
         handler = _HANDLERS.get((_ns(child), _local(child)))
         if handler is not None:
             handler(scope, child)
@@ -813,6 +844,7 @@ def _read_half(scope: _Scope, half: ET.Element) -> None:
         else:
             _generic(scope, child, unique=totals[(_ns(child), _local(child))] == 1)
     _finish_scripts(scope)
+    scope.finish_hidden()
 
 
 def _dedupe(settings: list[Setting]) -> list[Setting]:
@@ -876,8 +908,9 @@ def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
     return found
 
 
-def _links(element: ET.Element) -> list[Link]:
-    links = []
+def _links(element: ET.Element, base: Source, problems: list[Problem]) -> list[Link] | None:
+    """Read a GPO's links; ``None`` when one target is listed twice with different flags."""
+    links: list[Link] = []
     for entry in _all(element, "LinksTo", SETTINGS):
         target = _text(entry, "SOMPath", SETTINGS) or _text(entry, "SOMName", SETTINGS) or ""
         links.append(
@@ -887,6 +920,18 @@ def _links(element: ET.Element) -> list[Link]:
                 enforced=_text(entry, "NoOverride", SETTINGS) == "true",
             )
         )
+    seen: dict[str, Link] = {}
+    for link in links:
+        other = seen.setdefault(link.target.casefold(), link)
+        if (other.enabled, other.enforced) != (link.enabled, link.enforced):
+            where = Source(base.file, f"{base.detail} LinksTo[{link.target}]".strip())
+            problems.append(
+                Problem(
+                    where,
+                    "this link is listed twice with different settings; links were not compared",
+                )
+            )
+            return None
     return links
 
 
@@ -922,7 +967,69 @@ def _enabled(half: ET.Element | None) -> bool | None:
     return {"true": True, "false": False}.get(flag or "")
 
 
+def _conflicts(element: ET.Element, names: tuple[str, ...]) -> list[str]:
+    """Return the names, of those that should appear once, found more than once and differing.
+
+    Copies that are the same in every respect are harmless and read as one; copies that
+    differ cannot be told apart, so mishpat does not choose one by position.
+    """
+    out = []
+    for local in names:
+        copies = _all(element, local, SETTINGS)
+        if len({json.dumps(_whole_content(c), ensure_ascii=False) for c in copies}) > 1:
+            out.append(local)
+    return out
+
+
+_GPO_SINGLES = (
+    "Identifier",
+    "Name",
+    "SecurityDescriptor",
+    "FilterName",
+    "FilterDescription",
+    "FilterDataAvailable",
+    "Computer",
+    "User",
+)
+_HALF_SINGLES = ("Enabled", "VersionDirectory", "VersionSysvol")
+
+
+def _conflict_problems(base: Source, where: str, names: list[str], what: str) -> list[Problem]:
+    return [
+        Problem(
+            Source(base.file, f"{base.detail} {where}{local}".strip()),
+            f"{local} appears more than once with different contents; mishpat did not choose "
+            f"one, so {what} was not compared",
+        )
+        for local in names
+    ]
+
+
+def _halves(
+    element: ET.Element, conflicts: list[str], base: Source, problems: list[Problem]
+) -> dict[str, ET.Element | None]:
+    """Find the Computer and User halves; a half that is contradictory is ``None``.
+
+    A conflicting half's name is added to ``conflicts``, with a problem.
+    """
+    halves: dict[str, ET.Element | None] = {}
+    for name in ("Computer", "User"):
+        half = None if name in conflicts else _find(element, name, SETTINGS)
+        inner = [] if half is None else _conflicts(half, _HALF_SINGLES)
+        problems.extend(_conflict_problems(base, f"{name}/", inner, f"the {name} half"))
+        if inner:
+            conflicts.append(name)
+            half = None
+        halves[name] = half
+    return halves
+
+
 def _gpo(element: ET.Element, base: Source, problems: list[Problem]) -> Gpo:
+    conflicts = _conflicts(element, _GPO_SINGLES)
+    if "Identifier" in conflicts or "Name" in conflicts:
+        msg = "it has two different Identifier or Name elements"
+        raise _BadGpoError(msg)
+    problems.extend(_conflict_problems(base, "", conflicts, "it"))
     identity = _find(element, "Identifier", SETTINGS)
     raw = _text(identity, "Identifier", TYPES) if identity is not None else None
     if not raw:
@@ -942,19 +1049,20 @@ def _gpo(element: ET.Element, base: Source, problems: list[Problem]) -> Gpo:
         domain=(_text(identity, "Domain", TYPES) if identity is not None else None) or "",
         name=name,
         source=base,
-        trustees=_trustees(_find(element, "SecurityDescriptor", SETTINGS)),
-        wmi_filter=_wmi(element),
-        links=_links(element),
+        trustees=None
+        if "SecurityDescriptor" in conflicts
+        else _trustees(_find(element, "SecurityDescriptor", SETTINGS)),
+        wmi_filter="unknown"
+        if {"FilterName", "FilterDescription", "FilterDataAvailable"} & set(conflicts)
+        else _wmi(element),
+        links=_links(element, base, problems),
         context={
             "created": _text(element, "CreatedTime", SETTINGS) or "",
             "modified": _text(element, "ModifiedTime", SETTINGS) or "",
         },
     )
     gpo.context = {k: v for k, v in gpo.context.items() if v}
-    halves = {
-        "Computer": _find(element, "Computer", SETTINGS),
-        "User": _find(element, "User", SETTINGS),
-    }
+    halves = _halves(element, conflicts, base, problems)
     gpo.computer_enabled = _enabled(halves["Computer"])
     gpo.user_enabled = _enabled(halves["User"])
     for scope_name, half in halves.items():
@@ -962,6 +1070,8 @@ def _gpo(element: ET.Element, base: Source, problems: list[Problem]) -> Gpo:
         if half is None:
             # Get-GPOReport always writes both halves; without one, its settings are unknown.
             gpo.context[evidence_key(scope_name)] = "unreadable"
+            if scope_name in conflicts:
+                continue  # already a problem
             where = Source(base.file, f"{base.detail} {scope_name}".strip())
             problems.append(
                 Problem(
