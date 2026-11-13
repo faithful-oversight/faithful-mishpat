@@ -5,3 +5,6 @@ Each record explains one significant decision: its context, the decision, and it
 - [1. Record architecture decisions](0001-record-architecture-decisions.md)
 - [2. Python core with a versioned output contract](0002-python-core.md)
 - [3. Documentation as code, published with Sphinx](0003-documentation-site.md)
+- [4. A JSON Lines export bundle with hashed files and a structure line](0004-export-bundle.md)
+- [5. Remote collection over WinRM](0005-remote-collection.md)
+- [6. Rules for comparing two versions of Group Policy](0006-comparison-rules.md)

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "faithful-mishpat"
-version = "0.0.0"
+version = "0.1.0"
 description = "GPO Change Review: Produces a readable, reviewable difference between two versions of Group Policy, including links, filters, and inheritance context."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Faithful Oversight, LLC" }]
 keywords = ["group-policy", "gpo", "active-directory", "change-review", "windows"]
 classifiers = [
-  "Development Status :: 1 - Planning",
+  "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: System Administrators",
   "Intended Audience :: Information Technology",
@@ -29,6 +29,14 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = []
+
+[project.optional-dependencies]
+# Remote collection over PowerShell remoting. Reading files needs no dependencies.
+live = ["pypsrp>=0.8"]
+keyring = ["keyring>=25"]
+vault = ["hvac>=2.3"]
+aws = ["boto3>=1.35"]
+azure = ["azure-identity>=1.19", "azure-keyvault-secrets>=4.9"]
 
 [project.scripts]
 mishpat = "faithful_mishpat.cli:main"
@@ -46,6 +54,8 @@ dev = [
   "cyclonedx-bom>=7",
   "furo>=2025.12.19",
   "hypothesis>=6.100",
+  "jsonschema>=4.23",
+  "types-jsonschema>=4.23",
   "mypy>=1.15",
   "myst-parser>=5",
   "pip-audit>=2.9",
@@ -141,3 +151,6 @@ exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 [tool.codespell]
 skip = "uv.lock,LICENSE,LICENSES/*,.git,.venv,.vale"
 check-hidden = true
+# SOM is the WMI filter container (CN=SOM); caf is a test prefix; collecter is a deliberate
+# misspelling in a test that checks unknown keys are refused.
+ignore-words-list = "som,caf,collecter"

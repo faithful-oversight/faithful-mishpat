@@ -1,0 +1,585 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faithful-oversight.github.io/faithful-mishpat/schema/report-v1.schema.json",
+  "title": "mishpat report",
+  "description": "Version 1 of the report mishpat writes for a comparison of two versions of Group Policy: the differences, what was not compared, what could not be read, and the limits of the method. Markdown, HTML and CSV are rendered from this document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "tool",
+    "generated_at",
+    "inputs",
+    "options",
+    "comparison",
+    "summary",
+    "notices",
+    "gpos",
+    "differences",
+    "gaps",
+    "problems",
+    "limitations"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "mishpat"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "generated_at": {
+      "$ref": "#/$defs/time"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "kind",
+          "size",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "integer",
+          "boolean",
+          "null"
+        ]
+      },
+      "description": "The options the run used, such as how GPOs were paired."
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "before",
+        "after",
+        "match",
+        "complete"
+      ],
+      "properties": {
+        "before": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        },
+        "match": {
+          "enum": [
+            "guid",
+            "name"
+          ]
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "True when every input was read in full."
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "differences",
+        "gpos_compared",
+        "gpos_changed",
+        "scope_differences",
+        "problems",
+        "gaps",
+        "notices",
+        "by_category",
+        "by_kind",
+        "by_status"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean",
+          "description": "True when there are no problems."
+        },
+        "differences": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gpos_compared": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gpos_changed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "GPOs with at least one difference."
+        },
+        "scope_differences": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Differences that belong to a scope of management, not to a GPO."
+        },
+        "problems": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gaps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notices": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_category": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "gpo",
+              "status",
+              "wmi-filter",
+              "security-filtering",
+              "permissions",
+              "link",
+              "inheritance",
+              "setting"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "by_kind": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "added",
+              "removed",
+              "changed",
+              "renamed",
+              "only-before",
+              "only-after"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "by_status": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "changed",
+              "unchanged",
+              "added",
+              "removed",
+              "only-before",
+              "only-after"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gpos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "guid",
+          "before_guid",
+          "name",
+          "status",
+          "differences",
+          "context"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string"
+          },
+          "before_guid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "changed",
+              "unchanged",
+              "added",
+              "removed",
+              "only-before",
+              "only-after"
+            ]
+          },
+          "differences": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "context": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "computer_enabled",
+                  "user_enabled",
+                  "wmi_filter",
+                  "security_filtering",
+                  "links"
+                ],
+                "properties": {
+                  "computer_enabled": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "user_enabled": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "wmi_filter": {
+                    "oneOf": [
+                      {
+                        "enum": [
+                          "none",
+                          "unknown"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "description",
+                          "identifier",
+                          "query"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "identifier": {
+                            "type": "string"
+                          },
+                          "query": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "security_filtering": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "sid",
+                            "name"
+                          ],
+                          "properties": {
+                            "sid": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "links": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "target",
+                            "enabled",
+                            "enforced",
+                            "order"
+                          ],
+                          "properties": {
+                            "target": {
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "enforced": {
+                              "type": "boolean"
+                            },
+                            "order": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "minimum": 1
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "The GPO as the after input records it, or null when that input does not hold it. A null inside means the input does not record that fact."
+          }
+        }
+      }
+    },
+    "differences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "kind",
+          "gpo",
+          "gpo_name",
+          "scope",
+          "area",
+          "subject",
+          "before",
+          "after",
+          "note",
+          "labels",
+          "sources"
+        ],
+        "properties": {
+          "category": {
+            "enum": [
+              "gpo",
+              "status",
+              "wmi-filter",
+              "security-filtering",
+              "permissions",
+              "link",
+              "inheritance",
+              "setting"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "added",
+              "removed",
+              "changed",
+              "renamed",
+              "only-before",
+              "only-after"
+            ]
+          },
+          "gpo": {
+            "type": "string"
+          },
+          "gpo_name": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "",
+              "Computer",
+              "User"
+            ]
+          },
+          "area": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "before": {
+            "$ref": "#/$defs/value"
+          },
+          "after": {
+            "$ref": "#/$defs/value"
+          },
+          "note": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Words shown beside values, by the value as text: an account name beside a SID, or a security option's meaning beside its number. Never compared."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file",
+                "detail"
+              ],
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Where each side was read, before first. One source when only one side holds the item."
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "reason",
+          "gpo"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "gpo": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "detail",
+          "reason"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$",
+      "format": "date-time",
+      "description": "RFC 3339, UTC, with a trailing Z. Fractional seconds appear only when they are not zero."
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "value": {
+      "type": [
+        "string",
+        "integer",
+        "boolean",
+        "null",
+        "array",
+        "object"
+      ],
+      "items": {
+        "$ref": "#/$defs/value"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/value"
+      },
+      "description": "A setting value or link, filter or trustee field: JSON-shaped, with sets already sorted. null means not set."
+    }
+  }
+}
