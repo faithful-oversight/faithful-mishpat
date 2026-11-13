@@ -257,7 +257,10 @@ def test_the_name_of_an_input_with_odd_bytes_is_what_sources_show(tmp_path: Path
     if os.name != "posix":
         return
     path = tmp_path / os.fsdecode(b"r\xff.xml")
-    path.write_bytes(report_bytes(gpo(GUID_A, "A")))
+    try:
+        path.write_bytes(report_bytes(gpo(GUID_A, "A")))
+    except OSError as exc:  # macOS file systems refuse names that are not UTF-8
+        pytest.skip(f"this file system refuses the name: {exc.strerror}")
     snapshot = read_side(path, "before")
     assert snapshot.inputs == ["r\\xff.xml"]
     assert snapshot.gpos[GUID_A].source == Source("r\\xff.xml")
