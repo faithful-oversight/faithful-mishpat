@@ -82,7 +82,11 @@ _IGNORED = frozenset(
     }
 )
 _SID = re.compile(r"[sS]-1-\d+(?:-\d+)+")
-_NUMBER = re.compile(r"-?\d+")
+_NUMBER = re.compile(r"-?[0-9]{1,20}")
+"""A whole number mishpat reads as a number: ASCII digits, at most 20 (a 64-bit value).
+
+Anything longer, or in other digits, stays text. Python refuses to convert thousands of digits,
+and such a number is not a registry value or a version."""
 _POLICY_NON_ELEMENTS = frozenset(
     {"Name", "State", "Explain", "Supported", "Category", "Comment", "Text"}
 )

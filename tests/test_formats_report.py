@@ -1209,3 +1209,53 @@ def test_a_permission_with_no_named_right_and_no_usable_mask_is_a_problem(mask: 
     assert "TrusteePermissions[1]" in str(problem.source)
     assert "not compared" in problem.reason
     assert result.gpos[0].trustees is not None
+
+
+# --- oversized and non-ASCII numbers (MISHPAT-C03) ----------------------------------------
+
+HUGE = "9" * 5000
+
+
+def registry_setting(number: str) -> str:
+    return fx.registry_ext(
+        f"<q1:RegistrySetting><q1:KeyPath>HKLM\\Software\\X</q1:KeyPath>"
+        f"<q1:Value><q1:Name>V</q1:Name><q1:Number>{number}</q1:Number></q1:Value>"
+        "</q1:RegistrySetting>"
+    )
+
+
+def test_a_number_of_thousands_of_digits_stays_text_and_is_not_a_crash() -> None:
+    gpo = one(computer=registry_setting(HUGE))
+    assert only(gpo).value == {"value": HUGE}
+
+
+def test_a_number_of_twenty_digits_is_still_a_number() -> None:
+    gpo = one(computer=registry_setting("18446744073709551615"))
+    assert only(gpo).value == {"value": 18446744073709551615}
+    assert one(computer=registry_setting("-1")).settings[0].value == {"value": -1}
+
+
+def test_digits_of_other_scripts_are_not_numbers() -> None:
+    assert only(one(computer=registry_setting("٣"))).value == {"value": "٣"}
+
+
+@pytest.mark.parametrize("scalar_text", [HUGE, "-" + HUGE, "1" * 21])
+def test_every_reader_that_converts_numbers_survives_a_long_one(scalar_text: str) -> None:
+    ext = fx.security_ext(
+        "<q1:SecurityOptions><q1:KeyName>MACHINE\\X</q1:KeyName>"
+        f"<q1:SettingNumber>{scalar_text}</q1:SettingNumber>"
+        "<q1:Display><q1:Name>Setting X</q1:Name></q1:Display></q1:SecurityOptions>"
+        f"<q1:Account><q1:Name>MinimumPasswordLength</q1:Name><q1:SettingNumber>{scalar_text}</q1:SettingNumber>"
+        "<q1:Type>Password</q1:Type></q1:Account>"
+    )
+    result = read(fx.gpo_xml(computer=ext))
+    assert result.gpos  # read, not an internal error
+
+
+def test_a_version_of_thousands_of_digits_is_a_problem_not_a_crash() -> None:
+    result = read(fx.gpo_xml(versions=(HUGE, "3", "1", "1")))
+    assert result.gpos
+    assert any(
+        "VersionDirectory" in p.reason and "not a number" in p.reason for p in result.problems
+    )
+    assert "computer directory" not in result.gpos[0].versions
