@@ -610,6 +610,7 @@ def _report(gpo: _Gpo, side: _Export) -> bytes:
         f"<CreatedTime>{gpo.created}</CreatedTime><ModifiedTime>{gpo.modified}</ModifiedTime>"
         f"<ReadTime>{read_at}</ReadTime>"
         "<SecurityDescriptor>"
+        f'<SDDL xmlns="{_SECURITY_TYPES}">O:DAG:DAD:PAI</SDDL>'
         f'<PermissionsPresent xmlns="{_SECURITY_TYPES}">true</PermissionsPresent>'
         f'<Permissions xmlns="{_SECURITY_TYPES}"><InheritsFromParent>false</InheritsFromParent>'
         f"{''.join(_trustee_xml(t) for t in gpo.trustees)}</Permissions></SecurityDescriptor>"

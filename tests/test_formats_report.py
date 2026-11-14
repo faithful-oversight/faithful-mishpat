@@ -124,12 +124,17 @@ def test_trustees() -> None:
             "NT AUTHORITY\\Authenticated Users",
             allow=True,
             rights=("Apply Group Policy",),
+            access_mask=0,
         ),
         Trustee(
-            f"{fx.DOMAIN_SID}-512", "CORP\\Domain Admins", allow=True, rights=("Edit settings",)
+            f"{fx.DOMAIN_SID}-512",
+            "CORP\\Domain Admins",
+            allow=True,
+            rights=("Edit settings",),
+            access_mask=0,
         ),
-        Trustee("S-1-1-0", "Everyone", allow=False, rights=("Apply Group Policy",)),
-        Trustee("S-1-5-18", "NT AUTHORITY\\SYSTEM", allow=True, rights=("Read",)),
+        Trustee("S-1-1-0", "Everyone", allow=False, rights=("Apply Group Policy",), access_mask=0),
+        Trustee("S-1-5-18", "NT AUTHORITY\\SYSTEM", allow=True, rights=("Read",), access_mask=0),
     ]
     assert gpo.trustees[0].applies
     assert not gpo.trustees[2].applies
@@ -149,8 +154,11 @@ def test_trustee_rights_are_sorted_unique_and_a_name_stands_in_for_a_missing_sid
 
 
 def test_trustee_without_trustee_or_rights_element() -> None:
-    (trustee,) = one(trustees="<q2:TrusteePermissions/>").trustees or []
+    result = read(fx.gpo_xml(trustees="<q2:TrusteePermissions/>"))
+    (trustee,) = result.gpos[0].trustees or []
     assert trustee == Trustee("", "", allow=False, rights=())
+    (problem,) = result.problems  # nothing to compare, so the entry is said to be unread
+    assert "unnamed trustee" in problem.reason
 
 
 def test_trustees_are_none_when_not_exported() -> None:
@@ -1137,3 +1145,67 @@ def test_canonical_helper() -> None:
     assert cast("dict[str, Any]", canonical(root, drop=frozenset({"x"}), sort=frozenset({"c"})))[
         "c"
     ] == ["", "2"]
+
+
+# --- security descriptor: owner, group, raw SDDL and custom permissions (MISHPAT-C01) ----
+
+OWNER_ELEMENT = (
+    f'<Owner xmlns="{fx.SECURITY_TYPES}"><SID xmlns="{TYPES}">S-1-5-21-1000-2000-3000-1999</SID>'
+    f'<Name xmlns="{TYPES}">CORP\\owner</Name></Owner>'
+)
+
+
+def test_owner_and_group_come_from_the_sddl_text() -> None:
+    gpo = one(sddl="O:DAG:S-1-5-21-1000-2000-3000-513D:PAI(A;;GA;;;DA)")
+    assert (gpo.owner, gpo.group) == ("DA", "S-1-5-21-1000-2000-3000-513")
+    assert gpo.sddl == "O:DAG:S-1-5-21-1000-2000-3000-513D:PAI(A;;GA;;;DA)"
+
+
+def test_an_sddl_without_an_owner_has_no_owner_and_no_problem() -> None:
+    gpo = one(sddl="D:PAI(A;;GA;;;DA)")
+    assert (gpo.owner, gpo.group) == (None, None)
+    assert gpo.sddl == "D:PAI(A;;GA;;;DA)"
+
+
+def test_no_sddl_means_nothing_recorded() -> None:
+    gpo = one(sddl=None)
+    assert (gpo.sddl, gpo.owner, gpo.group) == (None, None, None)
+
+
+def test_an_sddl_that_does_not_start_as_expected_is_a_problem() -> None:
+    result = read(fx.gpo_xml(sddl="owner is Domain Admins"))
+    (problem,) = result.problems
+    assert "SecurityDescriptor/SDDL" in str(problem.source)
+    assert "not compared" in problem.reason or "were not compared" in problem.reason
+    assert result.gpos[0].owner is None
+    assert result.gpos[0].sddl == "owner is Domain Admins"  # the text is still compared
+
+
+def test_an_owner_element_gives_the_owner_and_its_name() -> None:
+    gpo = one(owner=OWNER_ELEMENT)
+    assert (gpo.owner, gpo.owner_name) == ("S-1-5-21-1000-2000-3000-1999", "CORP\\owner")
+
+
+def test_an_owner_element_with_no_sid_or_name_is_a_problem() -> None:
+    empty = f'<Owner xmlns="{fx.SECURITY_TYPES}"/>'
+    result = read(fx.gpo_xml(owner=empty))
+    (problem,) = result.problems
+    assert "Owner element" in problem.reason
+    assert result.gpos[0].owner == "DA"  # the SDDL still gives one
+
+
+def test_a_permission_with_no_named_right_keeps_its_access_mask() -> None:
+    entry = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\x", "", mask=131072)
+    (trustee,) = one(trustees=entry).trustees or []
+    assert trustee.rights == ()
+    assert trustee.access_mask == 131072
+
+
+@pytest.mark.parametrize("mask", ["", "abc", "0x20000", "-1", "99999999999", "1.5"])
+def test_a_permission_with_no_named_right_and_no_usable_mask_is_a_problem(mask: str) -> None:
+    entry = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\x", "", mask=mask)
+    result = read(fx.gpo_xml(trustees=entry))
+    (problem,) = result.problems
+    assert "TrusteePermissions[1]" in str(problem.source)
+    assert "not compared" in problem.reason
+    assert result.gpos[0].trustees is not None

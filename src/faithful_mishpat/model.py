@@ -89,12 +89,16 @@ class Trustee:
         name: The account name as recorded, for reports only.
         allow: Allow (``True``) or Deny.
         rights: The GPMC permission names, sorted, such as ``Apply Group Policy``.
+        access_mask: The entry's access mask when the export wrote one that mishpat could
+            read as a number, else ``None``. It is used only for an entry that has no
+            named permission (a custom permission); see :func:`faithful_mishpat.compare`.
     """
 
     sid: str
     name: str
     allow: bool
     rights: tuple[str, ...]
+    access_mask: int | None = None
 
     @property
     def applies(self) -> bool:
@@ -153,6 +157,11 @@ class Gpo:
         versions: Version numbers by name (``computer directory``, ``computer
             sysvol``, ``user directory``, ``user sysvol``), for context only.
         trustees: Permission entries, or ``None`` when not exported.
+        sddl: The security descriptor in SDDL text, or ``None`` when the export holds none.
+        owner: The GPO owner's SID (or the SDDL alias), or ``None`` when not recorded.
+        owner_name: The owner's account name as recorded, for reports only.
+        group: The primary group's SID (or alias), or ``None`` when not recorded.
+        group_name: The primary group's name as recorded, for reports only.
         wmi_filter: The WMI filter, ``None`` when there is none, or the string
             ``"unknown"`` when the export cannot say.
         links: Links to scopes, or ``None`` when the export holds no links (a
@@ -170,6 +179,11 @@ class Gpo:
     user_enabled: bool | None = None
     versions: dict[str, int] = field(default_factory=dict)
     trustees: list[Trustee] | None = None
+    sddl: str | None = None
+    owner: str | None = None
+    owner_name: str = ""
+    group: str | None = None
+    group_name: str = ""
     wmi_filter: WmiFilter | str | None = "unknown"
     links: list[Link] | None = None
     settings: list[Setting] = field(default_factory=list)

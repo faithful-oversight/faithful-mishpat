@@ -43,9 +43,14 @@ def braces(guid: str) -> str:
 # --- report XML ---------------------------------------------------------------------
 
 
-def trustee(sid: str, name: str, right: str, *, allow: bool = True) -> str:
-    """One ``TrusteePermissions`` entry."""
+def trustee(sid: str, name: str, right: str, *, allow: bool = True, mask: int | str = 0) -> str:
+    """One ``TrusteePermissions`` entry; an empty ``right`` writes an empty ``Standard``."""
     kind = "Allow" if allow else "Deny"
+    standard = (
+        f"<q2:Standard><q2:GPOGroupedAccessEnum>{escape(right)}</q2:GPOGroupedAccessEnum></q2:Standard>"
+        if right
+        else "<q2:Standard/>"
+    )
     return f"""
       <q2:TrusteePermissions>
         <q2:Trustee><q3:SID>{sid}</q3:SID><q3:Name>{escape(name)}</q3:Name></q2:Trustee>
@@ -53,8 +58,8 @@ def trustee(sid: str, name: str, right: str, *, allow: bool = True) -> str:
           <q2:PermissionType>{kind}</q2:PermissionType>
         </q2:Type>
         <q2:Inherited>false</q2:Inherited>
-        <q2:Standard><q2:GPOGroupedAccessEnum>{escape(right)}</q2:GPOGroupedAccessEnum></q2:Standard>
-        <q2:AccessMask>0</q2:AccessMask>
+        {standard}
+        <q2:AccessMask>{mask}</q2:AccessMask>
       </q2:TrusteePermissions>"""
 
 
@@ -92,6 +97,8 @@ def gpo_xml(  # noqa: PLR0913 - a GPO has this many independent parts
     domain: str = DOMAIN,
     wmi_unavailable: bool = False,
     ident: str | None = None,
+    sddl: str | None = "O:DAG:DAD:PAI",
+    owner: str = "",
 ) -> str:
     """Build one ``<GPO>`` element as ``Get-GPOReport`` writes it.
 
@@ -99,12 +106,12 @@ def gpo_xml(  # noqa: PLR0913 - a GPO has this many independent parts
     the ``ExtensionData`` blocks (see :func:`extension`).
     """
     descriptor = ""
+    sddl_xml = "" if sddl is None else f'<SDDL xmlns="{SECURITY_TYPES}">{escape(sddl)}</SDDL>\n    '
     if trustees is not None:
         unprefixed = trustees.replace("<q2:", "<").replace("</q2:", "</")
         descriptor = f"""
   <SecurityDescriptor>
-    <SDDL xmlns="{SECURITY_TYPES}">O:DAG:DAD:PAI</SDDL>
-    <PermissionsPresent xmlns="{SECURITY_TYPES}">true</PermissionsPresent>
+    {sddl_xml}{owner}<PermissionsPresent xmlns="{SECURITY_TYPES}">true</PermissionsPresent>
     <Permissions xmlns="{SECURITY_TYPES}" xmlns:q3="{TYPES}">
       <InheritsFromParent>false</InheritsFromParent>{unprefixed}
     </Permissions>
@@ -112,7 +119,7 @@ def gpo_xml(  # noqa: PLR0913 - a GPO has this many independent parts
     else:
         descriptor = f"""
   <SecurityDescriptor>
-    <PermissionsPresent xmlns="{SECURITY_TYPES}">false</PermissionsPresent>
+    {sddl_xml}{owner}<PermissionsPresent xmlns="{SECURITY_TYPES}">false</PermissionsPresent>
   </SecurityDescriptor>"""
     filt = ""
     if wmi is not None:

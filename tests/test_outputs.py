@@ -1625,11 +1625,12 @@ def test_csv_neutralises_formulas_and_keeps_full_values() -> None:
                 before=FORMULA,
                 after="@SUM(1)",
                 note="\t=x",
-                area="-1",
+                area="-cmd",
                 sources=(Source(FULL_EQUALS + "bad", FULL_PLUS + "x"), Source("\n=y", "")),
             ),
             diff(subject="2", before=long, after=["=a", "b"]),
             diff(subject="3", before=PAYLOAD),
+            diff(subject="4", before="-1", after=-5),
         ]
     )
     text = r.render_csv(build_report(comparison, [], GENERATED, "0.1.0"))
@@ -1639,7 +1640,8 @@ def test_csv_neutralises_formulas_and_keeps_full_values() -> None:
     assert rows[1][7] == "'" + FORMULA
     assert rows[1][8] == "'@SUM(1)"
     assert rows[1][9] == "'\t=x"
-    assert rows[1][5] == "'-1"
+    assert rows[1][5] == "'-cmd"
+    assert rows[4][7:9] == ["-1", "-5"]  # a plain negative number stays a number
     assert rows[1][10].startswith("'" + FULL_EQUALS + "bad")
     assert rows[1][11] == "'=y"  # the source text is stripped, then neutralised
     assert rows[2][7] == long  # never shortened
@@ -1647,7 +1649,7 @@ def test_csv_neutralises_formulas_and_keeps_full_values() -> None:
     assert "\x1b" not in text
     assert RLO not in text
     assert "\\u202e" in text
-    for row in rows[1:]:
+    for row in rows[1:4]:
         for cell in row:
             assert not cell.startswith(("=", "+", "-", "@", "\t", "\r", "\n"))
 

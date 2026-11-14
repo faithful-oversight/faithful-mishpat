@@ -632,3 +632,50 @@ def test_an_output_folder_that_cannot_be_made_leaves_nothing_behind(
     blocked.write_text("a file", encoding="utf-8")
     assert compare(*pair, blocked / "inside") == ExitCode.INPUT_ERROR
     assert blocked.read_text(encoding="utf-8") == "a file"
+
+
+# --- owner and custom permissions are compared, never passed over (MISHPAT-C01) ---------------
+
+
+def test_a_changed_owner_and_a_custom_permission_are_not_a_clean_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    custom = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\evil", "", mask=131072)
+    before = write(tmp_path / "before.xml", gpo())
+    after = write(
+        tmp_path / "after.xml",
+        fx.gpo_xml(
+            computer=fx.registry_ext(fx.policy("Allow thing", "Enabled")),
+            sddl="O:S-1-5-21-1000-2000-3000-1999G:DAD:PAI",
+            trustees=fx.DEFAULT_TRUSTEES + custom,
+        ),
+    )
+    out = tmp_path / "out"
+    assert compare(before, after, out) == ExitCode.FINDINGS
+    said = capsys.readouterr().out
+    assert "No differences" not in said
+    subjects = {(d["category"], d["subject"]) for d in report(out)["differences"]}
+    assert ("permissions", "owner") in subjects
+    assert ("permissions", "evil (S-1-5-21-1000-2000-3000-1500)") not in subjects
+    assert ("permissions", "CORP\\evil (S-1-5-21-1000-2000-3000-1500)") in subjects
+
+
+def test_a_permission_the_reader_cannot_interpret_makes_the_run_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    odd = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\x", "", mask="not a number")
+    before = write(tmp_path / "before.xml", gpo())
+    after = write(
+        tmp_path / "after.xml",
+        fx.gpo_xml(
+            computer=fx.registry_ext(fx.policy("Allow thing", "Disabled")),
+            trustees=fx.DEFAULT_TRUSTEES + odd,
+        ),
+    )
+    out = tmp_path / "out"
+    compare(before, after, out)
+    said = capsys.readouterr().out
+    assert "Every input was read in full" not in said
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("TrusteePermissions" in p["detail"] for p in document["problems"])

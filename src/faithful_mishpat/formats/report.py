@@ -873,7 +873,90 @@ def _dedupe(settings: list[Setting]) -> list[Setting]:
 # --- GPO level ------------------------------------------------------------------------
 
 
-def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
+_SDDL_HEAD = re.compile(
+    r"(?:O:(?P<owner>S-1(?:-\d+)+|[A-Z]{2}))?(?:G:(?P<group>S-1(?:-\d+)+|[A-Z]{2}))?(?=[DS]:|$)"
+)
+_MASK = re.compile(r"[0-9]{1,10}")
+
+
+@dataclass
+class _Descriptor:
+    """What a GPO's ``SecurityDescriptor`` element held, as far as mishpat can read it."""
+
+    trustees: list[Trustee] | None = None
+    sddl: str | None = None
+    owner: str | None = None
+    owner_name: str = ""
+    group: str | None = None
+    group_name: str = ""
+
+
+def _principal(descriptor: ET.Element, local: str) -> tuple[str, str] | None:
+    """Return ``(id, name)`` of a child ``Owner`` or ``Group``; ``None`` when there is none.
+
+    The element is found by its local name in any namespace, because mishpat has not seen
+    real ``Get-GPOReport`` output that holds one (see docs/limitations.md). An element that
+    holds neither a SID nor a name returns ``("", "")``.
+    """
+    for child in descriptor:
+        if _local(child) != local:
+            continue
+        sid = name = ""
+        for part in child:
+            if _local(part) == "SID":
+                sid = (part.text or "").strip().upper()
+            elif _local(part) == "Name":
+                name = (part.text or "").strip()
+        return sid or name, name
+    return None
+
+
+def _descriptor(
+    descriptor: ET.Element | None, base: Source, problems: list[Problem]
+) -> _Descriptor:
+    """Read the owner, group, SDDL text and permission entries of a GPO."""
+    if descriptor is None:
+        return _Descriptor()
+    found = _Descriptor(trustees=_trustees(descriptor, base, problems))
+    sddl = _text(descriptor, "SDDL", SECURITY_TYPES)
+    found.sddl = sddl or None
+    if sddl:
+        head = _SDDL_HEAD.match(sddl)
+        if head is None:
+            where = Source(base.file, f"{base.detail} SecurityDescriptor/SDDL".strip())
+            problems.append(
+                Problem(
+                    where,
+                    "the SDDL text does not start with an owner and group in the form mishpat "
+                    "reads, so the owner and group were not compared from it",
+                )
+            )
+        else:
+            found.owner = head["owner"].upper() if head["owner"] else None
+            found.group = head["group"].upper() if head["group"] else None
+    for local, attribute in (("Owner", "owner"), ("Group", "group")):
+        principal = _principal(descriptor, local)
+        if principal is None:
+            continue
+        if not principal[0]:
+            where = Source(base.file, f"{base.detail} SecurityDescriptor/{local}".strip())
+            problems.append(
+                Problem(where, f"the {local} element holds no SID or name; it was not compared")
+            )
+            continue
+        setattr(found, attribute, principal[0])
+        setattr(found, f"{attribute}_name", principal[1])
+    return found
+
+
+def _mask(entry: ET.Element) -> int | None:
+    text = _text(entry, "AccessMask", SECURITY_TYPES)
+    return int(text) if text is not None and _MASK.fullmatch(text) else None
+
+
+def _trustees(
+    descriptor: ET.Element | None, base: Source, problems: list[Problem]
+) -> list[Trustee] | None:
     if (
         descriptor is None
         or (_text(descriptor, "PermissionsPresent", SECURITY_TYPES) or "") != "true"
@@ -881,9 +964,10 @@ def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
         return None
     permissions = _find(descriptor, "Permissions", SECURITY_TYPES)
     found: list[Trustee] = []
-    for entry in (
+    entries = (
         _all(permissions, "TrusteePermissions", SECURITY_TYPES) if permissions is not None else []
-    ):
+    )
+    for number, entry in enumerate(entries, 1):
         trustee = _find(entry, "Trustee", SECURITY_TYPES)
         kind = _find(entry, "Type", SECURITY_TYPES)
         standard = _find(entry, "Standard", SECURITY_TYPES)
@@ -896,6 +980,20 @@ def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
             )
         } - {""}
         sid = _sid_or_name(trustee) if trustee is not None else ""
+        mask = _mask(entry)
+        if not rights and mask is None:
+            # A custom permission is written as an access mask. Without one there is nothing
+            # to compare, and silence would read as "this entry grants nothing".
+            where = Source(
+                base.file, f"{base.detail} SecurityDescriptor/TrusteePermissions[{number}]".strip()
+            )
+            problems.append(
+                Problem(
+                    where,
+                    f"the permission entry for {sid or 'an unnamed trustee'} has no named "
+                    "permission and no access mask that mishpat can read, so it was not compared",
+                )
+            )
         found.append(
             Trustee(
                 sid=sid,
@@ -903,6 +1001,7 @@ def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
                 allow=(_text(kind, "PermissionType", SECURITY_TYPES) if kind is not None else None)
                 == "Allow",
                 rights=tuple(sorted(rights)),
+                access_mask=mask,
             )
         )
     return found
@@ -1044,14 +1143,22 @@ def _gpo(element: ET.Element, base: Source, problems: list[Problem]) -> Gpo:
     if not name:
         msg = "it has no Name"
         raise _BadGpoError(msg)
+    descriptor = (
+        _Descriptor()
+        if "SecurityDescriptor" in conflicts
+        else _descriptor(_find(element, "SecurityDescriptor", SETTINGS), base, problems)
+    )
     gpo = Gpo(
         guid=guid,
         domain=(_text(identity, "Domain", TYPES) if identity is not None else None) or "",
         name=name,
         source=base,
-        trustees=None
-        if "SecurityDescriptor" in conflicts
-        else _trustees(_find(element, "SecurityDescriptor", SETTINGS)),
+        trustees=descriptor.trustees,
+        sddl=descriptor.sddl,
+        owner=descriptor.owner,
+        owner_name=descriptor.owner_name,
+        group=descriptor.group,
+        group_name=descriptor.group_name,
         wmi_filter="unknown"
         if {"FilterName", "FilterDescription", "FilterDataAvailable"} & set(conflicts)
         else _wmi(element),

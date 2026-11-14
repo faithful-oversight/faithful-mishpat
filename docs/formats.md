@@ -79,7 +79,11 @@ For each GPO, mishpat reads:
 - Whether the computer half and the user half are enabled.
 - The WMI filter name and description. A report with `FilterDataAvailable` set to `false` is recorded as unknown, not as having no filter.
 - The links (`LinksTo`): the scope path, enabled, and enforced (`NoOverride`). A report that lists no link gives an empty list of links.
-- The security descriptor: each trustee with its SID, name, allow or deny, and rights. A report without `PermissionsPresent` set to `true` gives no permissions, which is recorded as not recorded.
+- The security descriptor:
+  - Each trustee with its SID, name, allow or deny, and rights. A report without `PermissionsPresent` set to `true` gives no permissions, which is recorded as not recorded.
+  - For a trustee with no named right (a custom permission), the `AccessMask`, when it is a whole decimal number. A trustee with no named right and no such mask is a problem, so the entry is never passed over as if it granted nothing.
+  - The owner and the primary group. mishpat takes them from the `O:` and `G:` parts at the start of the `SDDL` text, and from an `Owner` or `Group` element when the descriptor holds one. A `SDDL` text that does not start with those parts in the documented SDDL form is a problem.
+  - The `SDDL` text itself, which holds every access entry in raw form, including flags and inheritance.
 - The settings of every extension, as [Settings](#settings) describes.
 
 mishpat reads the created and modified times, the version numbers, and the explanation and comment text, but it never compares them and the report does not show them. `ReadTime`, `Blocked`, `GPOSettingOrder`, `Explain`, and `Supported` are always left out of values.

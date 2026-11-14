@@ -10,14 +10,14 @@
     {
       "name": "corp-before.jsonl",
       "kind": "export",
-      "size": 83586,
-      "sha256": "82d77f942c418094510310d7e9bcff075051b558701a35e55b89496d454ea842"
+      "size": 84738,
+      "sha256": "c330375632bd8b2c011e15fc7d69b64e7af93ae7476a144916994ff763577ded"
     },
     {
       "name": "corp-after.jsonl",
       "kind": "export",
-      "size": 84608,
-      "sha256": "d0da271e200b96b3fe95ef5b1dfaf60085be5c58484fb14b0f0e210d0092079f"
+      "size": 85752,
+      "sha256": "ed27ccbcb78f70ae168ca3cc707c78e6b5b94fc3035ae76f7b6c6c1f0ecdf4e8"
     }
   ],
   "options": {
@@ -867,7 +867,7 @@
     "Item-level targeting in Group Policy Preferences is compared as written. mishpat does not evaluate whether an item applies to a computer or user.",
     "WMI filters are compared by name and description, and by query text only when the input recorded it. mishpat does not evaluate a filter.",
     "Link order, blocked inheritance and WMI query text are compared only when the input came from the mishpat exporter. Get-GPOReport files and Backup-GPO folders do not record them.",
-    "Security filtering and delegation are compared as the SIDs and rights on the GPO. Group membership is not expanded, so the report does not say who is covered.",
+    "Security filtering and delegation are compared as the SIDs and rights on the GPO, a permission with no named right by its access mask, and the owner, the primary group and the raw descriptor text when the input records them. Group membership is not expanded, so the report does not say who is covered.",
     "Version numbers, modified times and policy explanation text are neither compared nor shown, so saving a GPO without changing a setting shows no difference.",
     "A difference shows what changed. It does not say whether the change is correct or approved."
   ]

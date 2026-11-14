@@ -11,6 +11,7 @@ The tool will not:
 - Evaluate WMI filters. It compares a filter's name, description, and query text. It does not run the query or say which computers it matches.
 - Evaluate item-level targeting. A Group Policy Preferences item with a filter is compared as written. mishpat does not say whether the item applies to a computer or a user.
 - Expand group membership. Security filtering and delegation are compared as the SIDs and rights on the GPO. The report does not say who a change covers.
+- Read an access entry as Windows does. mishpat compares the named rights, the access mask of an entry that has no named right, the owner, the primary group, and the raw `SDDL` text. It does not decode the text into the rights each entry grants, so a change to an entry flag or to a mask beside named rights shows as one `security descriptor (SDDL)` difference with both texts.
 - Judge whether a change is correct or approved. A difference shows what changed. Whether it should have changed is for you to decide.
 - Compare modified times, version numbers, explanation text, or comments. Saving a GPO without changing a setting shows no difference.
 - Compare the order of Group Policy Preferences items. It does compare the order of the scripts of one type.
@@ -21,6 +22,7 @@ The tool will not:
 mishpat compares what the inputs record. An input that does not record something is not treated as empty. The report lists it under [Not compared](output.md#not-compared).
 
 - **Get-GPOReport files and Backup-GPO folders** do not record link order, blocked inheritance, or the WMI filter query. mishpat compares those only when both inputs are export bundles. [Input formats](formats.md#what-each-input-records) has the full table.
+- **The owner, the group, and the raw descriptor are compared only when the report records them.** mishpat reads the owner and group from the start of the `SDDL` text and from an `Owner` or `Group` element. When one input holds neither, the report lists `GPO owner, group and raw security descriptor` under Not compared. A permission entry with no named right and no readable access mask is a problem, so the comparison is incomplete.
 - **Links come from each GPO's own report.** A report lists the scopes a GPO is linked to. It does not list the other GPOs linked there, so it cannot give order.
 - **Link order is read from the position in `gPLink`**, with the last entry as link order 1. This has not been checked against GPMC on a real directory. See [Input formats](formats.md#structure-line).
 - **Link order is compared by GUID.** With `--match name`, a GPO that has a different GUID on each side is not part of the link order comparison. mishpat still compares its links GPO by GPO. See [Pairing by name](#pairing-by-name).
@@ -38,6 +40,8 @@ mishpat has no knowledge of ADMX files. It identifies an Administrative Template
 - **A different name or category is a different policy.** If the text differs between the two reports, mishpat shows one removal and one addition, not a change. A new version of the ADMX files that renames or moves a policy does this. Two reports made with different display languages can do the same.
 - **Make both reports the same way.** Use the same computer, or computers with the same ADMX files and display language, for both reports. The same applies to bundles: the names come from the computer that runs the exporter, which for `mishpat collect` is the controller.
 - **A policy change often shows twice.** A backup holds the policy in `gpreport.xml` and the registry values it sets in `Registry.pol`. Changing one policy changes both, and mishpat reports both, under the areas `Administrative Templates` and `Registry.pol`. See [Registry.pol](#registrypol).
+
+TODO(verify): confirm on a real domain how `Get-GPOReport` writes the security descriptor: that the `SDDL` text holds the owner, the group, and every access entry; whether an `Owner` and a `Group` element are written and in which namespace; and how an access entry with no named right (a granular permission) is written, including whether `AccessMask` is a decimal number. The readers handle the shapes the synthetic fixtures use and treat anything else as a problem or as not compared. They do not guess.
 
 TODO(verify): confirm on a real domain that `Get-GPOReport` writes policy names and categories in the display language of the computer that runs it, and that two ADMX versions can write different text for one policy. mishpat uses the text as written.
 

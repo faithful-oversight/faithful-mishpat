@@ -9,18 +9,18 @@
   "files": [
     {
       "name": "mishpat-report.json",
-      "size": 25309,
-      "sha256": "da1f37492434a2e018f75fd219a310ac3cf58b914951831d1ce6ce68fd054ea2"
+      "size": 25452,
+      "sha256": "69f75a18a308eebcc6f2b7ee6a48402975c17d8dba9c4c9282cb93b07757efa1"
     },
     {
       "name": "mishpat-report.md",
-      "size": 12720,
-      "sha256": "10baa3bcacda871fed090126c202b2bfe0f03016ede0e432646288e0ddc64bb5"
+      "size": 12863,
+      "sha256": "9b891b7ef1cb7e62769521ec3d1820f9f8328daf04800b5ae2a94b4d52cff745"
     },
     {
       "name": "mishpat-report.html",
-      "size": 23793,
-      "sha256": "e989d5aecc841c527414af42cbe04a6f3d8c270ebd190267923c15b04fd52163"
+      "size": 23936,
+      "sha256": "9c38dd2a9135547885a1a893ac6be4cc5f0b270aa4f67c837342e4331cba0b76"
     },
     {
       "name": "mishpat-differences.csv",
@@ -31,13 +31,13 @@
   "inputs": [
     {
       "name": "corp-before.jsonl",
-      "size": 83586,
-      "sha256": "82d77f942c418094510310d7e9bcff075051b558701a35e55b89496d454ea842"
+      "size": 84738,
+      "sha256": "c330375632bd8b2c011e15fc7d69b64e7af93ae7476a144916994ff763577ded"
     },
     {
       "name": "corp-after.jsonl",
-      "size": 84608,
-      "sha256": "d0da271e200b96b3fe95ef5b1dfaf60085be5c58484fb14b0f0e210d0092079f"
+      "size": 85752,
+      "sha256": "ed27ccbcb78f70ae168ca3cc707c78e6b5b94fc3035ae76f7b6c6c1f0ecdf4e8"
     }
   ]
 }

@@ -119,7 +119,7 @@ Differences are in the order of the GPO's name, then the order of the categories
 | `status` | The computer half or user half turned on or off | `changed` | `computer half` or `user half`, then `enabled` or `disabled`. |
 | `wmi-filter` | The WMI filter of a GPO | `added`, `removed`, `changed` | `WMI filter`, then `null` or the name, description, and query. |
 | `security-filtering` | A trustee that is allowed to apply the GPO | `added`, `removed` | The trustee's name and SID, then `applies` or `null`. |
-| `permissions` | Every other permission entry on the GPO, which is delegation | `added`, `removed`, `changed` | The trustee, then the sorted rights. |
+| `permissions` | Every other permission entry on the GPO, which is delegation, and the GPO's owner, primary group, and raw security descriptor | `added`, `removed`, `changed` | The trustee, then the sorted rights. For the owner or group, the subject is `owner` or `group`, then the SID or alias. For the raw descriptor, the subject is `security descriptor (SDDL)`, then both texts. |
 | `link` | A link of a GPO, or the order of the links on a scope | `added`, `removed`, `changed` | The link target, then `enabled` and `enforced`. For order, the scope, then the GPO names in order. |
 | `inheritance` | A scope that starts or stops blocking inheritance, or one that blocks it and is in one input only | `changed`, `added`, `removed`, `only-before`, `only-after` | The scope's path, then `blocked` or `not blocked`. |
 | `setting` | A setting in a GPO | `added`, `removed`, `changed` | The setting's title, then its value. |
@@ -151,6 +151,10 @@ An added or removed GPO is one difference. mishpat does not list its settings on
 
 **Permissions.** Every other permission entry is delegation. mishpat compares them by SID and by allow or deny. The value is the sorted list of rights. An entry that gains or loses a right is `changed`. A deny entry has the note `deny`. A deny entry for Apply Group Policy is listed here, not under security filtering, because only allow entries filter.
 
+An entry with no named right is a custom permission. mishpat compares it by its access mask and writes it as `custom access mask 0x00020000`. An entry with no named right and an access mask of zero grants nothing and is not listed.
+
+mishpat also compares the GPO's owner and its primary group, and lists a change as `changed` with the subject `owner` or `group`. When the raw `SDDL` text differs and none of the owner, the group, a security filtering entry, or a named permission explains it, mishpat lists one difference with the subject `security descriptor (SDDL)` and both texts, so a change to entry flags or to a raw access mask is never missed. It is not listed a second time when a named difference already points at the change.
+
 **Links.** mishpat compares the links of a GPO by target, without regard to case. A link that appears or disappears is `added` or `removed`. A link whose enabled or enforced state differs is `changed`. A link target is written in the form a report uses, such as `corp.example/Servers`.
 
 Link order is a property of a scope, not of a GPO, so it is a separate difference under [Domain structure](#report-sections). For each scope that both inputs record, mishpat takes the GPOs that are linked there in both inputs and compares their order. A GPO linked on one side only does not count, so adding one link does not make every later link look moved. The difference is `changed`, with the GPO names in order before and after. Its subject is the scope's distinguished name followed by `: link order`.
@@ -173,6 +177,7 @@ Gaps list what mishpat did not compare, and why. They do not make a comparison i
 | `WMI filter` | One input cannot say whether the GPO has a filter. |
 | `WMI filter query` | Both versions of the GPO have a filter, and one input does not record the query. Only a bundle records the query. |
 | `security filtering and permissions` | One input does not record the permissions of the GPO. |
+| `GPO owner, group and raw security descriptor` | One input does not record the owner, the primary group, or the `SDDL` text of the GPO. |
 | `links` | One input does not record the links of the GPO, such as a backup without its `gpreport.xml`. |
 | `Registry.pol values` | The inputs are not both backups or bundles read in full. |
 | `link order and blocked inheritance` | One input does not record the structure of the domain. Only a bundle does. |

@@ -144,6 +144,7 @@ def _compare_gpo(old: Gpo, new: Gpo, result: Comparison) -> int:
             )
     _compare_filter(old, new, result)
     _compare_trustees(old, new, result)
+    _compare_descriptor(old, new, result)
     _compare_links(old, new, result)
     _compare_settings(old, new, result)
     return len(result.differences) - start
@@ -259,6 +260,9 @@ def _permissions(
         rights = tuple(
             r for r in trustee.rights if not (trustee.allow and r == "Apply Group Policy")
         )
+        if not trustee.rights and trustee.access_mask:
+            # No named permission: a custom permission, which the export writes as a mask.
+            rights = (f"custom access mask 0x{trustee.access_mask:08X}",)
         if not rights:
             continue
         key = (trustee.sid.casefold(), trustee.allow)
@@ -276,6 +280,73 @@ def _who(trustee: Trustee) -> str:
         f"{trustee.name} ({trustee.sid})"
         if trustee.name and trustee.name != trustee.sid
         else trustee.sid
+    )
+
+
+def _compare_descriptor(old: Gpo, new: Gpo, result: Comparison) -> None:
+    """Compare the GPO's owner, its primary group and, last, the raw SDDL text.
+
+    The raw text holds every other part of the descriptor (entry flags, inheritance, raw
+    masks). It is reported only when nothing named explains the change, so one added
+    trustee is one difference and not two.
+    """
+    both = (old.source, new.source)
+    for label, was, now, names in (
+        ("owner", old.owner, new.owner, (old.owner_name, new.owner_name)),
+        ("group", old.group, new.group, (old.group_name, new.group_name)),
+    ):
+        if was is not None and now is not None and was.casefold() != now.casefold():
+            labels = tuple((sid, name) for sid, name in ((was, names[0]), (now, names[1])) if name)
+            result.differences.append(
+                Difference(
+                    "permissions",
+                    "changed",
+                    new.guid,
+                    new.name,
+                    label,
+                    was,
+                    now,
+                    sources=both,
+                    labels=labels,
+                )
+            )
+    if any(g.sddl is None or g.owner is None or g.group is None for g in (old, new)):
+        side = "after" if _recorded(old) else "before"
+        reason = f"the {side} input does not record the owner, the group or the SDDL text"
+        result.gaps.append(Gap("GPO owner, group and raw security descriptor", reason, new.guid))
+    if (
+        old.sddl is not None
+        and new.sddl is not None
+        and old.sddl != new.sddl
+        and not _named_change(result, new.guid)
+    ):
+        result.differences.append(
+            Difference(
+                "permissions",
+                "changed",
+                new.guid,
+                new.name,
+                "security descriptor (SDDL)",
+                old.sddl,
+                new.sddl,
+                sources=both,
+                note=(
+                    "No owner, group or named permission changed, so the change is in a part "
+                    "mishpat does not list separately, such as entry flags or a raw access mask."
+                ),
+            )
+        )
+
+
+def _recorded(gpo: Gpo) -> bool:
+    return gpo.sddl is not None and gpo.owner is not None and gpo.group is not None
+
+
+def _named_change(result: Comparison, guid: str) -> bool:
+    """Whether a named permission or filtering difference was already found for this GPO."""
+    return any(
+        d.gpo == guid and d.category in {"permissions", "security-filtering"}
+        for d in result.differences
     )
 
 

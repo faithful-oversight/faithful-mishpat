@@ -47,6 +47,9 @@ def gpo(guid: str = GUID, name: str = "Baseline - Servers", **changes: Any) -> G
         trustees=[
             Trustee(USERS, "Authenticated Users", allow=True, rights=("Apply Group Policy", "Read"))
         ],
+        sddl="O:DAG:DAD:PAI",
+        owner="DA",
+        group="DA",
         wmi_filter=None,
         links=[Link("corp.example/Servers", enabled=True, enforced=False)],
         settings=[setting("MinimumPasswordLength", 14)],
@@ -432,3 +435,80 @@ def test_an_unchanged_filter_and_a_trustee_with_only_the_filtering_right() -> No
 def test_inputs_sharing_no_gpo_by_name() -> None:
     result = compare(side(gpo()), side(gpo(OTHER, "Other"), label="after"), match="name")
     assert "share no GPO by name" in result.notices[0]
+
+
+# --- owner, group, raw SDDL and custom permissions (MISHPAT-C01) ----------------------------
+
+CUSTOM = "S-1-5-21-1000-2000-3000-1500"
+
+
+def test_a_changed_owner_is_a_difference_with_names() -> None:
+    after = gpo(owner="S-1-5-21-1000-2000-3000-1999", owner_name="CORP\\evil")
+    (difference,) = compare(side(gpo()), side(after, label="after")).differences
+    assert (difference.category, difference.kind, difference.subject) == (
+        "permissions",
+        "changed",
+        "owner",
+    )
+    assert (difference.before, difference.after) == ("DA", "S-1-5-21-1000-2000-3000-1999")
+    assert difference.labels == (("S-1-5-21-1000-2000-3000-1999", "CORP\\evil"),)
+
+
+def test_a_changed_group_is_a_difference() -> None:
+    result = compare(side(gpo()), side(gpo(group="BA"), label="after"))
+    assert kinds(result) == [("permissions", "changed", "group")]
+
+
+def test_owner_comparison_ignores_case() -> None:
+    assert compare(side(gpo()), side(gpo(owner="da"), label="after")).differences == []
+
+
+def test_a_new_custom_permission_is_listed_by_its_mask() -> None:
+    entry = Trustee(CUSTOM, "CORP\\x", allow=True, rights=(), access_mask=131072)
+    trustees = [*(gpo().trustees or []), entry]
+    (difference,) = compare(side(gpo()), side(gpo(trustees=trustees), label="after")).differences
+    assert (difference.category, difference.kind) == ("permissions", "added")
+    assert difference.after == ["custom access mask 0x00020000"]
+
+
+def test_a_changed_custom_mask_is_a_difference() -> None:
+    def with_mask(mask: int) -> Gpo:
+        return gpo(trustees=[Trustee(CUSTOM, "CORP\\x", allow=True, rights=(), access_mask=mask)])
+
+    result = compare(side(with_mask(131072)), side(with_mask(983551), label="after"))
+    (difference,) = result.differences
+    assert (difference.before, difference.after) == (
+        ["custom access mask 0x00020000"],
+        ["custom access mask 0x000F01FF"],
+    )
+
+
+def test_an_entry_with_no_right_and_a_zero_mask_grants_nothing() -> None:
+    entry = Trustee(CUSTOM, "CORP\\x", allow=True, rights=(), access_mask=0)
+    after = gpo(trustees=[*(gpo().trustees or []), entry])
+    assert compare(side(gpo()), side(after, label="after")).differences == []
+
+
+def test_an_sddl_change_nothing_else_explains_is_reported_with_both_texts() -> None:
+    after = gpo(sddl="O:DAG:DAD:PAI(A;CI;GA;;;DA)")
+    (difference,) = compare(side(gpo()), side(after, label="after")).differences
+    assert difference.subject == "security descriptor (SDDL)"
+    assert (difference.before, difference.after) == ("O:DAG:DAD:PAI", "O:DAG:DAD:PAI(A;CI;GA;;;DA)")
+    assert "does not list separately" in difference.note
+
+
+def test_an_sddl_change_is_not_listed_again_when_a_named_permission_changed() -> None:
+    changed = Trustee(
+        USERS, "Authenticated Users", allow=True, rights=("Apply Group Policy", "Edit")
+    )
+    after = gpo(trustees=[changed], sddl="O:DAG:DAD:PAI(A;;GA;;;DA)")
+    assert kinds(compare(side(gpo()), side(after, label="after"))) == [
+        ("permissions", "changed", "Authenticated Users (S-1-5-11)")
+    ]
+
+
+def test_a_descriptor_that_is_not_recorded_is_a_gap_not_a_clean_result() -> None:
+    result = compare(side(gpo(sddl=None, owner=None, group=None)), side(gpo(), label="after"))
+    assert result.differences == []
+    (gap,) = [g for g in result.gaps if g.subject.startswith("GPO owner")]
+    assert "before input does not record the owner, the group or the SDDL text" in gap.reason
