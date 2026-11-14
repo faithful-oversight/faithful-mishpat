@@ -679,3 +679,25 @@ def test_a_permission_the_reader_cannot_interpret_makes_the_run_incomplete(
     document = report(out)
     assert document["summary"]["complete"] is False
     assert any("TrusteePermissions" in p["detail"] for p in document["problems"])
+
+
+def test_a_backup_too_deep_to_be_read_is_a_problem_not_a_clean_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    shallow = fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo()))
+    deep = fx.backup_files(
+        fx.GUID_B,
+        "Deep",
+        backup_id=fx.BACKUP_B,
+        prefix="a/b/c/d/e/" + fx.BACKUP_B,
+        report=fx.report_bytes(gpo(fx.GUID_B, "Deep")),
+    )
+    fx.write_tree(tmp_path / "before", shallow)
+    fx.write_tree(tmp_path / "after", {**shallow, **deep})
+    out = tmp_path / "out"
+    assert compare(tmp_path / "before", tmp_path / "after", out) == ExitCode.FINDINGS
+    said = capsys.readouterr().out
+    assert "Every input was read in full" not in said
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("was not read" in p["reason"] for p in document["problems"])

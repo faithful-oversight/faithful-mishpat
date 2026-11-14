@@ -103,6 +103,7 @@ mishpat refuses or reports as a problem:
 - A single file inside a backup larger than 64 MiB.
 - A bundle with more than 100,000 files, or more than 1 GiB of file bytes.
 - XML that nests elements more than 64 levels deep.
+- A backup folder more than four levels below the folder you gave. It is not read, and the report lists it as a problem. If the search below that depth passes 20,000 folders, it stops and says so as a problem.
 
 ## Exporter and collection
 
