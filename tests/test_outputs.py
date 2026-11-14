@@ -1827,3 +1827,32 @@ def test_lists_of_equal_length_name_the_type_of_the_member_that_changed() -> Non
     markdown = r.render_markdown(type_change_report(["1", "x"], [1, "x"]))
     assert '"1" (text)' in markdown
     assert "1 (number)" in markdown
+
+
+# --- grouping does not scale with GPOs times differences (MISHPAT-C07) ---------------------
+
+
+class CountingList(list):  # type: ignore[type-arg]
+    """A list that counts how many times it is iterated from start to end."""
+
+    passes = 0
+
+    def __iter__(self) -> Any:
+        """Count the pass, then iterate as a list does."""
+        type(self).passes += 1
+        return super().__iter__()
+
+
+def test_grouping_differences_by_gpo_reads_them_once_however_many_gpos_there_are() -> None:
+    guids = [f"{n:08x}-0000-4000-8000-000000000000" for n in range(300)]
+    comparison = empty_comparison(
+        pairs=[pair(g, f"GPO {g}", "changed", 1) for g in guids],
+        differences=[diff(gpo=g, gpo_name=f"GPO {g}", subject=f"S {g}") for g in guids],
+    )
+    document = build_report(comparison, [], GENERATED, "0.1.1")
+    document["differences"] = CountingList(document["differences"])
+    CountingList.passes = 0
+    r.render_markdown(document)
+    r.render_html(document)
+    # Both renderers group the differences. Each had one pass per GPO (300) before the fix.
+    assert CountingList.passes < 60

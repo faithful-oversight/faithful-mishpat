@@ -1079,6 +1079,8 @@ def _conflicts(element: ET.Element, names: tuple[str, ...]) -> list[str]:
     out = []
     for local in names:
         copies = _all(element, local, SETTINGS)
+        if not copies[1:]:
+            continue  # nothing to contradict, and nothing to serialise
         if len({json.dumps(_whole_content(c), ensure_ascii=False) for c in copies}) > 1:
             out.append(local)
     return out

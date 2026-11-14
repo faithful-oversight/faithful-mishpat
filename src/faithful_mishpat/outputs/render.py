@@ -331,25 +331,28 @@ def _by_gpo(report: Report) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
     """
     scope_level = [d for d in report["differences"] if not d["gpo"]]
     listed = {g["guid"] for g in report["gpos"]}
-    sections: list[dict[str, Any]] = []
-    for gpo in report["gpos"]:
-        mine = [d for d in report["differences"] if d["gpo"] == gpo["guid"]]
-        if mine:
-            sections.append({**gpo, "list": mine})
-    for guid in dict.fromkeys(d["gpo"] for d in report["differences"] if d["gpo"]):
-        if guid not in listed:
-            mine = [d for d in report["differences"] if d["gpo"] == guid]
-            sections.append(
-                {
-                    "guid": guid,
-                    "before_guid": "",
-                    "name": mine[0]["gpo_name"],
-                    "status": "changed",
-                    "differences": len(mine),
-                    "context": None,
-                    "list": mine,
-                }
-            )
+    # One pass over the differences, so the cost grows with their number and not with
+    # the number of GPOs times the number of differences.
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for d in report["differences"]:
+        if d["gpo"]:
+            groups.setdefault(d["gpo"], []).append(d)
+    sections: list[dict[str, Any]] = [
+        {**gpo, "list": groups[gpo["guid"]]} for gpo in report["gpos"] if gpo["guid"] in groups
+    ]
+    sections.extend(
+        {
+            "guid": guid,
+            "before_guid": "",
+            "name": mine[0]["gpo_name"],
+            "status": "changed",
+            "differences": len(mine),
+            "context": None,
+            "list": mine,
+        }
+        for guid, mine in groups.items()
+        if guid not in listed
+    )
     return sections, scope_level
 
 
