@@ -291,6 +291,8 @@ The last entry in the string is taken to have link order 1, the highest preceden
 
 Each `gaps` entry becomes a problem, `WHAT was not read: REASON`, and the comparison is incomplete.
 
+Two scopes whose distinguished names read as the same path, such as `OU=B` inside `OU=A` and a top-level `OU=A\/B`, are a problem: links are compared by path, so a change to a link of either could not be told apart. The comparison is incomplete.
+
 A bundle with no structure line is accepted, and then it records no link order and no blocked inheritance. The exporter always writes a structure line.
 
 ### Trailer line

@@ -85,7 +85,7 @@ A report names each input by its file or folder name only. When the two inputs h
 
 ## Paths of links
 
-A slash in an organizational unit's name reads the same as a nested unit: `OU=A/B` and `OU=B` inside `OU=A` are both `corp.example/A/B`, as in a `Get-GPOReport` path.
+A slash in an organizational unit's name reads the same as a nested unit: `OU=A/B` and `OU=B` inside `OU=A` are both `corp.example/A/B`, as in a `Get-GPOReport` path. Links are compared by that path, so two scopes in one bundle that read as the same path would hide a change to one of their links. mishpat lists such a bundle as a problem, naming both scopes, so the comparison is incomplete.
 
 A report writes a link target as a path such as `corp.example/Servers`. mishpat writes the target of a link from a bundle in the same form, converted from the distinguished name of the scope. mishpat compares them without regard to case.
 

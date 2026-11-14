@@ -465,6 +465,7 @@ def som_path(dn: str, kind: str) -> str:
 class _Structure:
     scopes: dict[str, Scope] = field(default_factory=dict)
     paths: dict[str, str] = field(default_factory=dict)
+    taken: dict[str, str] = field(default_factory=dict)
     filters: dict[str, str] = field(default_factory=dict)
     conflicting: set[str] = field(default_factory=set)
 
@@ -543,7 +544,18 @@ def _scope(entry: object, where: Source, result: _Structure, problems: list[Prob
         problems.append(Problem(where, f"The links of {path[:80]!r} were not read: {exc}"))
         links = ()
     result.scopes[path.casefold()] = Scope(path, kind, entry["blocked"], links, where)
-    result.paths[path.casefold()] = som_path(path, kind)
+    shown = som_path(path, kind)
+    result.paths[path.casefold()] = shown
+    other = result.taken.setdefault(shown.casefold(), path)
+    if other != path:
+        # Links are compared by this path, so a link of either scope could be lost.
+        problems.append(
+            Problem(
+                where,
+                f"The scopes {other[:80]!r} and {path[:80]!r} are both written as {shown[:80]!r}, "
+                "so their links cannot be told apart; link changes on them were not compared",
+            )
+        )
 
 
 def _filter(entry: object, where: Source, result: _Structure, problems: list[Problem]) -> None:
