@@ -145,6 +145,51 @@ def _scalar(value: Any) -> str:
     return f'"{text}"' if isinstance(value, str) and text != text.strip() else text
 
 
+_TYPE_WORDS = ((bool, "true or false"), (int, "number"), (str, "text"))
+
+
+def _type_word(value: Any) -> str:
+    return next(word for kind, word in _TYPE_WORDS if isinstance(value, kind))
+
+
+def _disambiguate(before: Any, after: Any) -> tuple[Any, Any]:
+    """Name the type on each side when only the type differs, so it never looks unchanged.
+
+    ``"5"`` (text) and ``5`` (a number) read the same on a page, but a consumer of a registry
+    value treats them differently. Where the two sides write the same and are not the same
+    kind of value, both are shown with the kind: ``"5" (text)`` and ``5 (number)``.
+    """
+    if isinstance(before, dict) and isinstance(after, dict):
+        shown_before, shown_after = dict(before), dict(after)
+        for key in before.keys() & after.keys():
+            shown_before[key], shown_after[key] = _disambiguate(before[key], after[key])
+        return shown_before, shown_after
+    if isinstance(before, list) and isinstance(after, list) and len(before) == len(after):
+        pairs = [_disambiguate(b, a) for b, a in zip(before, after, strict=True)]
+        return [b for b, _ in pairs], [a for _, a in pairs]
+    scalars = not isinstance(before, (dict, list)) and not isinstance(after, (dict, list))
+    if (
+        scalars
+        and before is not None
+        and after is not None
+        and type(before) is not type(after)
+        and _plain(before) == _plain(after)
+    ):
+        return (
+            f"{_quoted(before)} ({_type_word(before)})",
+            f"{_quoted(after)} ({_type_word(after)})",
+        )
+    return before, after
+
+
+def _plain(value: Any) -> str:
+    return ("true" if value else "false") if isinstance(value, bool) else str(value)
+
+
+def _quoted(value: Any) -> str:
+    return f'"{value}"' if isinstance(value, str) else _scalar(value)
+
+
 def _sides(difference: dict[str, Any]) -> tuple[Any, Any]:
     """The before and after values as a reader should see them.
 
@@ -159,7 +204,8 @@ def _sides(difference: dict[str, Any]) -> tuple[Any, Any]:
             before = {k: before.get(k) for k in keys}
             after = {k: after.get(k) for k in keys}
     labels = dict(difference.get("labels") or {})
-    return _labelled(before, labels), _labelled(after, labels)
+    before, after = _labelled(before, labels), _labelled(after, labels)
+    return _disambiguate(before, after)
 
 
 def _labelled(value: Any, labels: dict[str, str]) -> Any:
@@ -558,7 +604,7 @@ def render_csv(report: Report) -> str:
         before_source, after_source = _sources(d)
         row = (
             d["category"], d["kind"], d["gpo"], d["gpo_name"], d["scope"], d["area"],
-            d["subject"], _csv_value(d["before"]), _csv_value(d["after"]), d["note"],
+            d["subject"], *map(_csv_value, _disambiguate(d["before"], d["after"])), d["note"],
             before_source, after_source, complete,
         )  # fmt: skip
         writer.writerow([csv_cell(cell) for cell in row])

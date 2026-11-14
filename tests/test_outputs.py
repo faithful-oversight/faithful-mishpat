@@ -1777,3 +1777,53 @@ def test_hostile_values_survive_a_round_trip_through_every_file(tmp_path: Path) 
     again = json.loads(written[0].read_text(encoding="utf-8"))
     assert again == report
     assert "\x1b" in again["notices"][0]  # the JSON keeps exact values; the others escape them
+
+
+# --- a change of type is not shown as an unchanged value (MISHPAT-C04) ---------------------
+
+
+def type_change_report(before: Any, after: Any) -> dict[str, Any]:
+    comparison = empty_comparison(
+        differences=[diff(subject="HKLM\\Software\\X\\V", before=before, after=after)]
+    )
+    return build_report(comparison, [], GENERATED, "0.1.1")
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ({"value": "5"}, {"value": 5}),  # a REG_SZ that became a REG_DWORD
+        ("5", 5),
+        ({"value": "true"}, {"value": True}),
+        ({"a": 1, "value": "5"}, {"a": 1, "value": 5}),
+    ],
+)
+def test_a_value_whose_only_change_is_its_type_says_so_in_every_people_format(
+    before: Any, after: Any
+) -> None:
+    document = type_change_report(before, after)
+    markdown = r.render_markdown(document)
+    html = r.render_html(document)
+    assert "(text)" in markdown
+    assert "(number)" in markdown or "(true or false)" in markdown
+    assert "(text)" in html
+    assert document["differences"][0]["before"] == before  # the JSON keeps the real value
+
+
+def test_the_type_is_named_in_the_csv_for_a_plain_value() -> None:
+    row = rows_of(r.render_csv(type_change_report("5", 5)))[1]
+    assert row[7:9] == ['"5" (text)', "5 (number)"]
+
+
+def test_values_that_differ_in_text_are_not_given_type_words() -> None:
+    markdown = r.render_markdown(type_change_report({"value": "5"}, {"value": 6}))
+    assert "(text)" not in markdown
+    assert "(number)" not in markdown
+    same = r.render_markdown(type_change_report({"value": 5}, {"value": 5}))
+    assert "(number)" not in same
+
+
+def test_lists_of_equal_length_name_the_type_of_the_member_that_changed() -> None:
+    markdown = r.render_markdown(type_change_report(["1", "x"], [1, "x"]))
+    assert '"1" (text)' in markdown
+    assert "1 (number)" in markdown
