@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -125,7 +126,8 @@ def test_an_unreadable_file_in_a_folder_is_an_input_error(
         return real(self, *args, **kwargs)  # type: ignore[call-overload]
 
     monkeypatch.setattr(Path, "open", refuse)
-    with pytest.raises(InputError, match=r"cannot read gpreport\.xml: Permission denied"):
+    named = next(p for p in folder.rglob("*") if p.name == "gpreport.xml")
+    with pytest.raises(InputError, match=f"cannot read {re.escape(str(named))}: Permission denied"):
         fingerprint(folder)
 
 
@@ -138,12 +140,16 @@ def test_an_unreadable_folder_is_an_input_error(
         raise PermissionError(13, "Permission denied")
 
     monkeypatch.setattr(Path, "rglob", refuse)
-    with pytest.raises(InputError, match=r"cannot read bk: Permission denied"):
+    with pytest.raises(
+        InputError, match=f"cannot read {re.escape(str(folder))}: Permission denied"
+    ):
         fingerprint(folder)
 
 
 def test_a_missing_path_is_an_input_error(tmp_path: Path) -> None:
-    with pytest.raises(InputError, match=r"cannot read nope\.xml: No such file"):
+    with pytest.raises(
+        InputError, match=f"cannot read {re.escape(str(tmp_path / 'nope.xml'))}: No such file"
+    ):
         fingerprint(tmp_path / "nope.xml")
 
 
@@ -198,7 +204,8 @@ def test_run_pairs_by_name_when_asked(tmp_path: Path) -> None:
 def test_the_same_contents_are_refused_whatever_the_name(tmp_path: Path) -> None:
     (tmp_path / "one.xml").write_bytes(fx.report_bytes(gpo()))
     shutil.copy(tmp_path / "one.xml", tmp_path / "two.xml")
-    with pytest.raises(UsageError, match=r"one\.xml and two\.xml have the same contents"):
+    both = re.escape(f"{tmp_path / 'one.xml'} and {tmp_path / 'two.xml'}")
+    with pytest.raises(UsageError, match=f"{both} have the same contents"):
         pipeline.run(tmp_path / "one.xml", tmp_path / "two.xml")
     with pytest.raises(UsageError, match="same contents"):
         pipeline.run(tmp_path / "one.xml", tmp_path / "one.xml")
@@ -221,7 +228,7 @@ def test_a_file_and_a_folder_with_the_same_gpo_are_not_the_same_input(tmp_path: 
 
 def test_both_inputs_are_fingerprinted_before_either_is_read(tmp_path: Path) -> None:
     (tmp_path / "junk.txt").write_text("not xml", encoding="ascii")
-    with pytest.raises(InputError, match=r"cannot read missing\.xml"):
+    with pytest.raises(InputError, match=f"cannot read {re.escape(str(tmp_path / 'missing.xml'))}"):
         pipeline.run(tmp_path / "junk.txt", tmp_path / "missing.xml")
 
 

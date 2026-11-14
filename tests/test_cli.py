@@ -170,7 +170,7 @@ def test_inputs_with_the_same_contents_are_a_usage_error(
     out = tmp_path / "out"
     assert compare(pair[0], Path(copy), out) == ExitCode.USAGE
     err = capsys.readouterr().err
-    assert "before.xml and copy.xml have the same contents; compare two different versions" in err
+    assert f"{pair[0]} and {copy} have the same contents; compare two different versions" in err
     assert not out.exists()
 
 
@@ -188,14 +188,14 @@ def test_inputs_that_cannot_be_read_are_input_errors(
 ) -> None:
     out = tmp_path / "out"
     assert compare(pair[0], tmp_path / "gone.xml", out) == ExitCode.INPUT_ERROR
-    assert "cannot read gone.xml" in capsys.readouterr().err
+    assert f"cannot read {tmp_path / 'gone.xml'}: " in capsys.readouterr().err
     junk = tmp_path / "notes.txt"
     junk.write_text("hello", encoding="utf-8")
     assert compare(pair[0], junk, out) == ExitCode.INPUT_ERROR
-    assert "notes.txt is not a Get-GPOReport XML file" in capsys.readouterr().err
+    assert f"{junk} is not a Get-GPOReport XML file" in capsys.readouterr().err
     (tmp_path / "empty").mkdir()
     assert compare(pair[0], tmp_path / "empty", out) == ExitCode.INPUT_ERROR
-    assert "empty is not a Backup-GPO folder" in capsys.readouterr().err
+    assert f"{tmp_path / 'empty'} is not a Backup-GPO folder" in capsys.readouterr().err
     assert not out.exists()
 
 
@@ -622,7 +622,8 @@ def test_errors_never_print_a_secret_the_process_resolved(
     assert compare(pair[0], odd, tmp_path / "out") == ExitCode.INPUT_ERROR
     err = capsys.readouterr().err
     assert "hunter2" not in err
-    assert "cannot read [redacted]" in err
+    assert f"cannot read {tmp_path}" in err
+    assert "[redacted].xml" in err
 
 
 def test_an_output_folder_that_cannot_be_made_leaves_nothing_behind(

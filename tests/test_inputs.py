@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -89,7 +90,9 @@ def test_report_problems_are_kept(tmp_path: Path) -> None:
 def test_other_files_are_input_errors(tmp_path: Path, data: bytes) -> None:
     path = tmp_path / "x.xml"
     path.write_bytes(data)
-    with pytest.raises(InputError, match=r"^x\.xml is not a Get-GPOReport XML file: "):
+    with pytest.raises(
+        InputError, match=f"^{re.escape(str(path))} is not a Get-GPOReport XML file: "
+    ):
         read_side(path, "before")
 
 
@@ -113,12 +116,15 @@ def test_an_unreadable_file_is_an_input_error(
         raise PermissionError(13, "Permission denied")
 
     monkeypatch.setattr(Path, "open", refuse)
-    with pytest.raises(InputError, match=r"^cannot read x\.xml: Permission denied"):
+    with pytest.raises(InputError, match=f"^cannot read {re.escape(str(path))}: Permission denied"):
         read_side(path, "before")
 
 
 def test_a_missing_path_is_an_input_error(tmp_path: Path) -> None:
-    with pytest.raises(InputError, match=r"^nope does not exist or is neither a file nor a folder"):
+    pattern = (
+        f"^{re.escape(str(tmp_path / 'nope'))} does not exist or is neither a file nor a folder"
+    )
+    with pytest.raises(InputError, match=pattern):
         read_side(tmp_path / "nope", "before")
 
 
@@ -167,11 +173,13 @@ def test_current_directory_is_named_by_its_real_name(
 def test_a_folder_that_is_not_a_backup_is_an_input_error(tmp_path: Path) -> None:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "readme.txt").write_text("hi", "utf-8")
-    with pytest.raises(InputError, match=r"^docs is not a Backup-GPO folder"):
+    with pytest.raises(
+        InputError, match=f"^{re.escape(str(tmp_path / 'docs'))} is not a Backup-GPO folder"
+    ):
         read_side(tmp_path / "docs", "before")
     empty = tmp_path / "empty"
     empty.mkdir()
-    with pytest.raises(InputError, match=r"^empty is not a Backup-GPO folder"):
+    with pytest.raises(InputError, match=f"^{re.escape(str(empty))} is not a Backup-GPO folder"):
         read_side(empty, "before")
 
 
@@ -267,4 +275,4 @@ def test_the_name_of_an_input_with_odd_bytes_is_what_sources_show(tmp_path: Path
 
 
 def test_module_exports() -> None:
-    assert inputs.__all__ == ["display_name", "read_side"]
+    assert inputs.__all__ == ["display_name", "read_side", "shown_path"]

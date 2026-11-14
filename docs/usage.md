@@ -170,6 +170,8 @@ Writes a synthetic before and after into the folder, creating it if needed, and 
 
 Exit code `1` never means the tool failed. It means the result needs a look, so read the report.
 
+mishpat decides the exit code of `compare` before it prints the closing summary. A summary that cannot be printed does not change it: a closed pipe, such as `mishpat compare ... | head`, stops the printing and leaves the code as decided, and a terminal or redirect that cannot show a character in a path gets a backslash escape such as `\xe9` in its place. The report files are written whole in either case.
+
 ## Use in a pipeline
 
 `mishpat compare` needs no network access and no secrets, so it runs anywhere Python does.

@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from faithful_mishpat import console
 from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import names, remote, script, secrets
 from faithful_mishpat.errors import UsageError
@@ -119,11 +120,11 @@ def run_collect(args: argparse.Namespace) -> int:
         target = remote.Target(**{**vars(target), "secret": secrets.resolve(args.secret)})
     values = remote.parameters(names=args.name, guids=args.guid, every_gpo=args.all, server=server)
     result = remote.collect(target, script.text(), values, args.output, force=args.force)
-    print(terminal(f"Exported {result.files} files from {server} into {result.path}."))  # noqa: T201
+    console.say(terminal(f"Exported {result.files} files from {server} into {result.path}."))
     for gap in result.gaps:
-        print(terminal(f"  not read: {gap}"))  # noqa: T201
+        console.say(terminal(f"  not read: {gap}"))
     command = command_line("mishpat", "compare", str(result.path), "AFTER", "-o", "report")
-    print(terminal(f"Compare it with a later export using: {command}"))  # noqa: T201
+    console.say(terminal(f"Compare it with a later export using: {command}"))
     return 0
 
 
@@ -132,6 +133,6 @@ def run_exporter(args: argparse.Namespace) -> int:
     path: Path = args.output
     written = write_files(path.parent, {path.name: script.text()}, force=args.force)
     command = f".\\{script.NAME} -All -OutFile corp-gpos.jsonl"
-    print(terminal(f"Wrote {written[0]}. On a domain controller, in PowerShell:"))  # noqa: T201
-    print(terminal(f"  {command}"))  # noqa: T201
+    console.say(terminal(f"Wrote {written[0]}. On a domain controller, in PowerShell:"))
+    console.say(terminal(f"  {command}"))
     return 0

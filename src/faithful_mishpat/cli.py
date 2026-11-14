@@ -13,7 +13,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from faithful_mishpat import __version__, example, outputs, pipeline
+from faithful_mishpat import __version__, console, example, outputs, pipeline
 from faithful_mishpat.collect import cli as collect_cli
 from faithful_mishpat.collect.secrets import redact
 from faithful_mishpat.compare import MATCHES
@@ -139,17 +139,19 @@ def _compare(args: argparse.Namespace) -> int:
         after=after,
     )
     written = outputs.write_reports(document, args.output, args.format, force=args.force)
-    print(render.terminal_summary(document))  # noqa: T201
-    print(terminal(f"Reports written to {args.output}: {', '.join(p.name for p in written)}"))  # noqa: T201
-    if args.fail_on == "never":
-        return int(ExitCode.OK)
-    failed = not comparison.complete or (args.fail_on == "differences" and comparison.differences)
+    # The exit code is decided before anything is printed, so a summary that cannot be
+    # printed (a closed pipe, a path the terminal cannot show) never changes it.
+    failed = args.fail_on != "never" and (
+        not comparison.complete or (args.fail_on == "differences" and comparison.differences)
+    )
+    console.say(render.terminal_summary(document))
+    console.say(terminal(f"Reports written to {args.output}: {', '.join(p.name for p in written)}"))
     return int(ExitCode.FINDINGS if failed else ExitCode.OK)
 
 
 def _schema(args: argparse.Namespace) -> int:
     name = f"schema/{SCHEMAS[args.name]}.schema.json"
-    sys.stdout.write(files("faithful_mishpat").joinpath(name).read_text(encoding="utf-8"))
+    console.say(files("faithful_mishpat").joinpath(name).read_text(encoding="utf-8"), end="")
     return int(ExitCode.OK)
 
 
@@ -160,12 +162,21 @@ def _example(args: argparse.Namespace) -> int:
     command = command_line(
         "mishpat", "compare", str(before), str(after), "-o", str(args.directory / "report")
     )
-    print(terminal(f"Wrote a synthetic before and after to {args.directory}. Try:\n  {command}"))  # noqa: T201
+    console.say(
+        terminal(f"Wrote a synthetic before and after to {args.directory}. Try:\n  {command}")
+    )
     return int(ExitCode.OK)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line and return an exit code."""
+    console.prepare()
+    code = _run(argv)
+    console.finish()
+    return code
+
+
+def _run(argv: Sequence[str] | None) -> int:
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
@@ -178,12 +189,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return int(args.run(args))
     except MishpatError as exc:
-        print(f"mishpat: error: {terminal(redact(str(exc)))}", file=sys.stderr)  # noqa: T201
+        console.say(f"mishpat: error: {terminal(redact(str(exc)))}", err=True)
         return int(ExitCode.USAGE if isinstance(exc, UsageError) else ExitCode.INPUT_ERROR)
     except Exception as exc:  # noqa: BLE001 - last-resort handler keeps crashes distinct
-        print(  # noqa: T201
+        console.say(
             f"mishpat: internal error: {type(exc).__name__}: {terminal(redact(str(exc)))[:200]}\n"
             "This is a bug in mishpat. Please report it.",
-            file=sys.stderr,
+            err=True,
         )
         return int(ExitCode.INTERNAL_ERROR)
