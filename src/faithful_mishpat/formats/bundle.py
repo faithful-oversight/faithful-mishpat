@@ -279,6 +279,31 @@ def is_bundle(start: bytes) -> bool:
     return start.startswith(MARKER)
 
 
+def is_misencoded_bundle(start: bytes) -> bool:
+    """Whether a file starts like a bundle that was saved with a byte order mark or as UTF-16.
+
+    PowerShell 5.1 writes UTF-16 with ``>``, and some editors add a UTF-8 byte order mark.
+    mishpat reads only plain UTF-8 or ASCII bundles, so it says so instead of calling the
+    file bad XML.
+    """
+    candidates = (
+        (b"\xef\xbb\xbf", "utf-8"),
+        (b"\xff\xfe", "utf-16-le"),
+        (b"\xfe\xff", "utf-16-be"),
+    )
+    for mark, codec in candidates:
+        if start.startswith(mark):
+            body = start[len(mark) :]
+            text = (
+                body[: len(body) // 2 * 2].decode(codec, "ignore")
+                if "16" in codec
+                else body.decode(codec, "ignore")
+            )
+            if text.startswith(MARKER.decode("ascii")):
+                return True
+    return False
+
+
 # --- file lines ----------------------------------------------------------------------
 
 

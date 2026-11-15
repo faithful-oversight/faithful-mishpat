@@ -54,6 +54,13 @@ def _read_file(path: Path, name: str) -> Snapshot:
         raise InputError(msg) from None
     if is_bundle:
         return _bundle(path, name)
+    if bundle.is_misencoded_bundle(start):
+        msg = (
+            f"{name} looks like a mishpat export bundle that was saved with a byte order mark "
+            "or as UTF-16, which mishpat does not read; export it again, or save it as plain "
+            "UTF-8 without a byte order mark"
+        )
+        raise InputError(msg)
     result = report.read_report(data, Source(name))
     return Snapshot(
         label="",
