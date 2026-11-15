@@ -86,7 +86,7 @@ For each GPO, mishpat reads:
   - The `SDDL` text itself, which holds every access entry in raw form, including flags and inheritance.
 - The settings of every extension, as [Settings](#settings) describes.
 
-mishpat reads the created and modified times, the version numbers, and the explanation and comment text, but it never compares them and the report does not show them. `ReadTime`, `Blocked`, `GPOSettingOrder`, `Explain`, and `Supported` are always left out of values.
+mishpat reads the created and modified times, the version numbers, and the explanation and comment text, but it never compares them and the report does not show them. `ReadTime`, `Blocked`, `GPOSettingOrder`, `Explain`, and `Supported` are left out of values where they are direct children of `Extension`, and `Explain` and `Supported` also inside a policy and inside an extension mishpat has no reader for. In an extension mishpat has no reader for, any other nested element, even one called `Blocked`, is compared, because it may be a real setting. Text that follows a child element (mixed content) is part of the value, as `#tail`.
 
 ### Limits
 

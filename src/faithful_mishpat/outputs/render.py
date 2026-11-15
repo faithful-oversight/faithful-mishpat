@@ -74,7 +74,6 @@ WORDS = {
 _STATE_WORDS = {"complete": "Complete", "incomplete": "Incomplete"}
 _HEAD = ("Subject", "Kind", "Before", "After")
 _GPO_HEAD = ("Name", "GUID", "Status", "Differences")
-_SIDES = (("Before", "before"), ("After", "after"))
 
 
 # Words ------------------------------------------------------------------------------

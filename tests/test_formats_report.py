@@ -1259,3 +1259,37 @@ def test_a_version_of_thousands_of_digits_is_a_problem_not_a_crash() -> None:
         "VersionDirectory" in p.reason and "not a number" in p.reason for p in result.problems
     )
     assert "computer directory" not in result.gpos[0].versions
+
+
+# --- mixed content and ignored names inside unknown extensions (MISHPAT-C09) ---------------
+
+
+def generic(body: str) -> Any:
+    ext = fx.extension("Vendor/Thing", body.replace("<z:", "<q1:").replace("</z:", "</q1:"))
+    return only(one(computer=ext)).value
+
+
+def test_text_after_a_child_element_is_part_of_the_value() -> None:
+    allow = generic("<z:Thing><z:Name>n</z:Name>allow</z:Thing>")
+    deny = generic("<z:Thing><z:Name>n</z:Name>deny</z:Thing>")
+    assert allow != deny
+    assert allow["#tail"] == "allow"
+
+
+def test_indentation_between_children_is_not_a_tail() -> None:
+    value = generic("<z:Thing>\n  <z:A>1</z:A>\n  <z:B>2</z:B>\n</z:Thing>")
+    assert "#tail" not in value
+
+
+def test_a_setting_called_blocked_in_an_unknown_extension_is_compared() -> None:
+    on = generic("<z:Thing><z:Blocked>true</z:Blocked><z:A>1</z:A></z:Thing>")
+    off = generic("<z:Thing><z:Blocked>false</z:Blocked><z:A>1</z:A></z:Thing>")
+    assert on != off
+    assert on["Blocked"] == "true"
+
+
+def test_extension_level_read_time_is_still_left_out() -> None:
+    ext = fx.extension(
+        "Vendor/Thing", "<q1:ReadTime>now</q1:ReadTime><q1:Thing><q1:A>1</q1:A></q1:Thing>"
+    )
+    assert len(one(computer=ext).settings) == 1

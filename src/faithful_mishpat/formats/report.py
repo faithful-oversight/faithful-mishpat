@@ -11,7 +11,7 @@ One GPO element that cannot be read becomes a :class:`~faithful_mishpat.model.Pr
 the rest are still read. A file that is not a GPO report at all raises
 :class:`~faithful_mishpat.errors.InputError`.
 
-Mapping (``DESIGN.md``, "Report XML to Settings"):
+Mapping (see docs/formats.md, "Settings", and docs/adr/0006-comparison-rules.md):
 
 * ``Registry``: ``Policy`` is an ``Administrative Templates`` setting keyed by
   ``(Category, Name)``; ``RegistrySetting`` is a ``Registry`` setting keyed by
@@ -81,6 +81,7 @@ _IGNORED = frozenset(
         "GPOSettingOrder",
     }
 )
+_EXPLANATION = frozenset({"Explain", "Supported"})
 _SID = re.compile(r"[sS]-1-\d+(?:-\d+)+")
 _NUMBER = re.compile(r"-?[0-9]{1,20}")
 """A whole number mishpat reads as a number: ASCII digits, at most 20 (a 64-bit value).
@@ -97,7 +98,6 @@ _GPP_LABELS = {
 }
 _GPP_DROPPED = frozenset({"changed", "image", "status", "uid", "descr"})
 _GPP_SKIPPED = frozenset({"GPOSettingOrder", "Filters", "Properties"})
-_EFFECTIVE = ("computer", "user")
 
 
 @dataclass
@@ -185,10 +185,6 @@ def _attribute_name(key: str) -> str:
     return key.rpartition("}")[2]
 
 
-def _json(value: ValueData) -> str:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False)
-
-
 def _whole_content(element: ET.Element) -> list[object]:
     """Everything an element holds: names, attributes, text, children and the text after each."""
     return [
@@ -215,6 +211,7 @@ def canonical(
     *,
     drop: frozenset[str] = frozenset(),
     sort: frozenset[str] = frozenset({"Member"}),
+    ignore: frozenset[str] = _IGNORED,
 ) -> ValueData:
     """Return an element's content as plain data: attributes, text and children.
 
@@ -223,7 +220,8 @@ def canonical(
     namespaces never collide; only XML Schema instance attributes are left out. Text
     beside children is ``#text``, repeated children are lists (sorted for the names in
     ``sort``), and ``xsi:nil`` is ``None``. The ignored names (see the module
-    documentation) and the attribute names in ``drop`` are left out. SIDs are upper
+    documentation, or ``ignore`` when given) and the attribute names in ``drop`` are left out.
+    Text that follows a child element is kept, as ``#tail``. SIDs are upper
     case. A stored password (``cpassword``), as an attribute or as a whole element of
     any shape, is replaced by :func:`faithful_mishpat.formats.hidden.hide`.
     """
@@ -238,9 +236,12 @@ def canonical(
     children: dict[str, list[ValueData]] = {}
     for child in element:
         name = _local(child)
-        if name not in _IGNORED:
-            item = canonical(child, drop=drop, sort=sort)
+        if name not in ignore:
+            item = canonical(child, drop=drop, sort=sort, ignore=ignore)
             children.setdefault(name, []).append(item)
+    tails = [
+        tail for child in element if _local(child) not in ignore and (tail := _clean(child.tail))
+    ]
     if not attributes and not children:
         return text
     out: dict[str, ValueData] = {
@@ -249,6 +250,8 @@ def canonical(
     }
     if text:
         out["#text"] = text
+    if tails:
+        out["#tail"] = tails[0] if len(tails) == 1 else list(tails)
     for name in sorted(children):
         items = children[name]
         if name in sort:
@@ -795,7 +798,12 @@ def _generic_key(element: ET.Element, *, unique: bool, value: ValueData) -> tupl
 
 
 def _generic(scope: _Scope, element: ET.Element, *, unique: bool) -> None:
-    value = canonical(element)
+    # Inside an extension mishpat has no reader for, only the explanation text is left out
+    # (Explain, Supported). A nested element called Blocked, ReadTime or the like is
+    # compared: it may be a real setting, and a false difference is safer than a missed one.
+    # The other names in _IGNORED are dropped only where they are direct children of
+    # Extension (see _extension_children).
+    value = canonical(element, ignore=_EXPLANATION)
     key = _generic_key(element, unique=unique, value=value)
     scope.add(
         element,

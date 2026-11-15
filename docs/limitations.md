@@ -51,6 +51,7 @@ An extension that mishpat has no reader for is compared by its XML. See [Other e
 
 - The value is the element's attributes, text, and children, so the report shows it as a mapping and not as a sentence.
 - An element with no `Name`, `Id`, or `Type`, and with siblings of the same name, is identified by a hash of its content. A change to such an element is a removal and an addition, because the content is its identity.
+- Text that follows a child element is kept as `#tail`, in order, without its position among the children. Inside such an element only `Explain` and `Supported` are left out of the value.
 - Repeated child elements keep their document order, except `Member` elements, which are sorted. A new order of other repeated children is a change.
 
 ## Settings defined twice

@@ -42,7 +42,7 @@ The exporter and `mishpat collect` write the same bundle. Nothing after the read
 | Module | Responsibility |
 | --- | --- |
 | `cli` | The command-line interface, exit codes, and the `compare`, `schema`, and `example` commands. |
-| `arguments` | Argument types shared by the commands: times and bounded numbers. |
+| `arguments` | Argument types shared by the commands: bounded numbers. |
 | `errors` | `MishpatError` and its subclasses `InputError`, `CollectionError`, and `UsageError`. |
 | `model` | The plain data every reader produces: `Snapshot`, `Gpo`, `Setting`, `Trustee`, `Link`, `WmiFilter`, `Scope`, `Problem`, and `Source`. |
 | `formats` | One reader for each kind of input: `report`, `backup`, `bundle`, and `registrypol`, plus `xmlsafe`, the XML parser they share. |
