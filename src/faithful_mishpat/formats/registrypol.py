@@ -56,8 +56,10 @@ TYPE_NAMES = {
     10: "REG_RESOURCE_REQUIREMENTS_LIST",
     11: "REG_QWORD",
 }
-MAX_ENTRIES = 100_000
-"""Most entries read from one file. A real ``Registry.pol`` holds at most a few thousand.
+MAX_ENTRIES = 1_000_000
+"""Most entries read from one file; ``mishpat compare --max-pol-entries`` changes it. A real
+``Registry.pol`` holds at most a few thousand. Reaching it is a problem, so the run is
+incomplete and fails.
 
 Each entry becomes a setting, and a changed one a difference and a report record: about 5 KB
 of memory and 760 bytes of JSON for a 41-byte entry, so the limit keeps a crafted file of

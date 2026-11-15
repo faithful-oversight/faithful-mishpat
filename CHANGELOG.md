@@ -18,7 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A value that changes only its type, such as the text "5" becoming the number 5, now shows its type in the Markdown, HTML and CSV reports.
 - Two scopes in a bundle that read as the same path (such as `OU=A/B` and `OU=B` inside `OU=A`) are now a problem, because a change to one of their links could not be told apart.
 - Rendering Markdown and HTML no longer slows down sharply with thousands of changed GPOs.
-- A `Registry.pol` file is read up to 100,000 entries, and a larger one is a problem, which bounds memory use.
+- A `Registry.pol` file is read up to 1,000,000 entries, and a larger one is a problem (the run exits 1), which bounds memory use. `mishpat compare --max-pol-entries` and `--max-scan-folders` raise or lower the two limits.
 - Text that follows a child element, and nested elements named `Blocked` or `ReadTime`, are now compared inside an extension mishpat has no reader for.
 - A `Registry.pol` string that starts like the internal password stand-in is no longer shown as a stored password.
 - A bundle saved with a byte order mark or as UTF-16 is now named as such instead of as bad XML.

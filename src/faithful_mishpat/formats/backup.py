@@ -58,8 +58,11 @@ MAX_FILE = 64 * 1024 * 1024
 """Largest single file read from a backup, in bytes."""
 MAX_SEARCH_DEPTH = 4
 """How many folder levels below a root are searched for backups."""
-MAX_SCAN_FOLDERS = 20_000
-"""How many folders beyond that depth are listed, only to find a backup that would not be read."""
+MAX_SCAN_FOLDERS = 200_000
+"""How many folders beyond that depth are listed, only to find a backup that would not be read.
+
+``mishpat compare --max-scan-folders`` changes it. Reaching it is a problem, so the run is
+incomplete and fails."""
 
 _WMI_ID = re.compile(r'ID\s*=\s*"(\{[^"]*\})"', re.IGNORECASE)
 _USER_OFF = 1

@@ -119,7 +119,7 @@ The output of `Backup-GPO`. Each backup is a folder named by a backup ID (a GUID
   DomainSysvol/GPO/User/registry.pol
 ```
 
-Give mishpat either one backup folder, or a root folder that holds many. A root is any folder that is not itself a backup folder. mishpat searches up to four levels below it for folders that hold `bkupInfo.xml`, and reads each as one GPO. Below that depth it lists folders only to look for a `bkupInfo.xml`, up to 20,000 folders. A backup it finds there, or inside another backup folder, is not read and is listed as a problem, so the report does not claim the input was read in full. The `manifest.xml` that `Backup-GPO` writes beside the backups is not read.
+Give mishpat either one backup folder, or a root folder that holds many. A root is any folder that is not itself a backup folder. mishpat searches up to four levels below it for folders that hold `bkupInfo.xml`, and reads each as one GPO. Below that depth it lists folders only to look for a `bkupInfo.xml`, up to 200,000 folders (`--max-scan-folders` changes this). A backup it finds there, or inside another backup folder, is not read and is listed as a problem, so the report does not claim the input was read in full. The `manifest.xml` that `Backup-GPO` writes beside the backups is not read.
 
 ```powershell
 Backup-GPO -All -Path .\before

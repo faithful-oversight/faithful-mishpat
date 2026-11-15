@@ -11,7 +11,7 @@ The tool will not:
 - Evaluate WMI filters. It compares a filter's name, description, and query text. It does not run the query or say which computers it matches.
 - Evaluate item-level targeting. A Group Policy Preferences item with a filter is compared as written. mishpat does not say whether the item applies to a computer or a user.
 - Expand group membership. Security filtering and delegation are compared as the SIDs and rights on the GPO. The report does not say who a change covers.
-- Read an access entry as Windows does. mishpat compares the named rights, the access mask of an entry that has no named right, the owner, the primary group, and the raw `SDDL` text. It does not decode the text into the rights each entry grants, so a change to an entry flag or to a mask beside named rights shows as one `security descriptor (SDDL)` difference with both texts.
+- Read an access entry as Windows does. mishpat compares the named rights, the access mask of an entry that has no named right, the owner, the primary group, and the raw `SDDL` text. It does not decode the text into the rights each entry grants, so a change to an entry flag or to a mask beside named rights shows in the `security descriptor (SDDL)` difference, which is listed for every change to the text, with both texts.
 - Judge whether a change is correct or approved. A difference shows what changed. Whether it should have changed is for you to decide.
 - Compare modified times, version numbers, explanation text, or comments. Saving a GPO without changing a setting shows no difference.
 - Compare the order of Group Policy Preferences items. It does compare the order of the scripts of one type.
@@ -103,9 +103,9 @@ mishpat refuses or reports as a problem:
 - A `Get-GPOReport` file larger than 256 MiB.
 - A single file inside a backup larger than 64 MiB.
 - A bundle with more than 100,000 files, or more than 1 GiB of file bytes.
-- A `Registry.pol` file with more than 100,000 entries: the entries after the first 100,000 are not read, and the report lists a problem.
+- A `Registry.pol` file with more than 1,000,000 entries (change it with `--max-pol-entries`): the entries after that are not read, the report lists a problem, and the run exits 1.
 - XML that nests elements more than 64 levels deep.
-- A backup folder more than four levels below the folder you gave. It is not read, and the report lists it as a problem. If the search below that depth passes 20,000 folders, it stops and says so as a problem.
+- A backup folder more than four levels below the folder you gave. It is not read, and the report lists it as a problem. If the search below that depth passes 200,000 folders (change it with `--max-scan-folders`), it stops, says so as a problem, and the run exits 1.
 
 ## Exporter and collection
 

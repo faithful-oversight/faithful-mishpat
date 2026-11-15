@@ -287,8 +287,8 @@ def _compare_descriptor(old: Gpo, new: Gpo, result: Comparison) -> None:
     """Compare the GPO's owner, its primary group and, last, the raw SDDL text.
 
     The raw text holds every other part of the descriptor (entry flags, inheritance, raw
-    masks). It is reported only when nothing named explains the change, so one added
-    trustee is one difference and not two.
+    masks). Any change to it is always listed, beside the named differences, so a reviewer
+    sees the complete change.
     """
     both = (old.source, new.source)
     for label, was, now, names in (
@@ -314,12 +314,7 @@ def _compare_descriptor(old: Gpo, new: Gpo, result: Comparison) -> None:
         side = "after" if _recorded(old) else "before"
         reason = f"the {side} input does not record the owner, the group or the SDDL text"
         result.gaps.append(Gap("GPO owner, group and raw security descriptor", reason, new.guid))
-    if (
-        old.sddl is not None
-        and new.sddl is not None
-        and old.sddl != new.sddl
-        and not _named_change(result, new.guid)
-    ):
+    if old.sddl is not None and new.sddl is not None and old.sddl != new.sddl:
         result.differences.append(
             Difference(
                 "permissions",
@@ -331,8 +326,9 @@ def _compare_descriptor(old: Gpo, new: Gpo, result: Comparison) -> None:
                 new.sddl,
                 sources=both,
                 note=(
-                    "No owner, group or named permission changed, so the change is in a part "
-                    "mishpat does not list separately, such as entry flags or a raw access mask."
+                    "The whole security descriptor text changed. Named differences for this GPO "
+                    "show what mishpat can name; this row is the complete change, including "
+                    "entry flags and raw access masks."
                 ),
             )
         )
@@ -340,14 +336,6 @@ def _compare_descriptor(old: Gpo, new: Gpo, result: Comparison) -> None:
 
 def _recorded(gpo: Gpo) -> bool:
     return gpo.sddl is not None and gpo.owner is not None and gpo.group is not None
-
-
-def _named_change(result: Comparison, guid: str) -> bool:
-    """Whether a named permission or filtering difference was already found for this GPO."""
-    return any(
-        d.gpo == guid and d.category in {"permissions", "security-filtering"}
-        for d in result.differences
-    )
 
 
 def _compare_links(old: Gpo, new: Gpo, result: Comparison) -> None:

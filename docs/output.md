@@ -153,7 +153,7 @@ An added or removed GPO is one difference. mishpat does not list its settings on
 
 An entry with no named right is a custom permission. mishpat compares it by its access mask and writes it as `custom access mask 0x00020000`. An entry with no named right and an access mask of zero grants nothing and is not listed.
 
-mishpat also compares the GPO's owner and its primary group, and lists a change as `changed` with the subject `owner` or `group`. When the raw `SDDL` text differs and none of the owner, the group, a security filtering entry, or a named permission explains it, mishpat lists one difference with the subject `security descriptor (SDDL)` and both texts, so a change to entry flags or to a raw access mask is never missed. It is not listed a second time when a named difference already points at the change.
+mishpat also compares the GPO's owner and its primary group, and lists a change as `changed` with the subject `owner` or `group`. Whenever the raw `SDDL` text differs, mishpat also lists one difference with the subject `security descriptor (SDDL)` and both texts, beside any named difference, so a change to entry flags or to a raw access mask is never missed and a reviewer always sees the complete change.
 
 **Links.** mishpat compares the links of a GPO by target, without regard to case. A link that appears or disappears is `added` or `removed`. A link whose enabled or enforced state differs is `changed`. A link target is written in the form a report uses, such as `corp.example/Servers`.
 

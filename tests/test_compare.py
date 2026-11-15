@@ -489,21 +489,22 @@ def test_an_entry_with_no_right_and_a_zero_mask_grants_nothing() -> None:
     assert compare(side(gpo()), side(after, label="after")).differences == []
 
 
-def test_an_sddl_change_nothing_else_explains_is_reported_with_both_texts() -> None:
+def test_an_sddl_change_is_reported_with_both_texts() -> None:
     after = gpo(sddl="O:DAG:DAD:PAI(A;CI;GA;;;DA)")
     (difference,) = compare(side(gpo()), side(after, label="after")).differences
     assert difference.subject == "security descriptor (SDDL)"
     assert (difference.before, difference.after) == ("O:DAG:DAD:PAI", "O:DAG:DAD:PAI(A;CI;GA;;;DA)")
-    assert "does not list separately" in difference.note
+    assert "complete change" in difference.note
 
 
-def test_an_sddl_change_is_not_listed_again_when_a_named_permission_changed() -> None:
+def test_an_sddl_change_is_listed_beside_a_named_permission_change() -> None:
     changed = Trustee(
         USERS, "Authenticated Users", allow=True, rights=("Apply Group Policy", "Edit")
     )
     after = gpo(trustees=[changed], sddl="O:DAG:DAD:PAI(A;;GA;;;DA)")
     assert kinds(compare(side(gpo()), side(after, label="after"))) == [
-        ("permissions", "changed", "Authenticated Users (S-1-5-11)")
+        ("permissions", "changed", "Authenticated Users (S-1-5-11)"),
+        ("permissions", "changed", "security descriptor (SDDL)"),
     ]
 
 

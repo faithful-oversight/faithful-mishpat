@@ -22,6 +22,7 @@ from jsonschema.validators import validator_for
 from faithful_mishpat import __version__, cli, example, pipeline
 from faithful_mishpat.cli import ExitCode, main
 from faithful_mishpat.collect import secrets
+from faithful_mishpat.formats import registrypol
 from faithful_mishpat.outputs import FILE_NAMES, MANIFEST_NAME
 from tests import fixtures_gpo as fx
 
@@ -702,3 +703,67 @@ def test_a_backup_too_deep_to_be_read_is_a_problem_not_a_clean_result(
     document = report(out)
     assert document["summary"]["complete"] is False
     assert any("was not read" in p["reason"] for p in document["problems"])
+
+
+# --- limits are overridable and never silent (owner decision) ---------------------------------
+
+
+def pol_backup(root: Path, entries: int) -> Path:
+    pol = fx.registry_pol([("Software\\X", f"V{n}", 4, fx.dword(n)) for n in range(entries)])
+    files = fx.backup_files(report=fx.report_bytes(gpo()), machine_pol=pol)
+    fx.write_tree(root, files)
+    return root
+
+
+def test_the_registry_pol_limit_fails_the_run_and_can_be_raised(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    before, after = pol_backup(tmp_path / "b", 5), pol_backup(tmp_path / "a", 6)
+    out = tmp_path / "out"
+    code = compare(before, after, out, "--max-pol-entries", "3", "--fail-on", "incomplete")
+    assert code == ExitCode.FINDINGS
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("more than 3 entries" in p["reason"] for p in document["problems"])
+    assert "Every input was read in full" not in capsys.readouterr().out
+    assert (
+        compare(
+            before, after, tmp_path / "out2", "--max-pol-entries", "10", "--fail-on", "incomplete"
+        )
+        == ExitCode.OK
+    )
+    assert registrypol.MAX_ENTRIES == 1_000_000  # the option never leaks past the run
+
+
+def test_the_scan_limit_fails_the_run_and_can_be_raised(tmp_path: Path) -> None:
+    deep = "/".join(["d"] * 4)
+    files = {f"{deep}/x{n}/y/file.txt": b"x" for n in range(5)}
+    fx.write_tree(
+        tmp_path / "b", {**fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo()))}
+    )
+    changed = fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo(state="Disabled")))
+    fx.write_tree(tmp_path / "a", {**changed, **files})
+    out = tmp_path / "out"
+    code = compare(
+        tmp_path / "b", tmp_path / "a", out, "--max-scan-folders", "2", "--fail-on", "incomplete"
+    )
+    assert code == ExitCode.FINDINGS
+    assert any("stopped after 2 folders" in p["reason"] for p in report(out)["problems"])
+    code = compare(
+        tmp_path / "b",
+        tmp_path / "a",
+        tmp_path / "out2",
+        "--max-scan-folders",
+        "100",
+        "--fail-on",
+        "incomplete",
+    )
+    assert code == ExitCode.OK
+
+
+@pytest.mark.parametrize("option", ["--max-pol-entries", "--max-scan-folders"])
+@pytest.mark.parametrize("value", ["0", "-1", "many"])
+def test_the_limit_options_refuse_nonsense(
+    pair: tuple[Path, Path], tmp_path: Path, option: str, value: str
+) -> None:
+    assert compare(*pair, tmp_path / "o", option, value) == ExitCode.USAGE

@@ -14,10 +14,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from faithful_mishpat import __version__, console, example, outputs, pipeline
+from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import cli as collect_cli
 from faithful_mishpat.collect.secrets import redact
 from faithful_mishpat.compare import MATCHES
 from faithful_mishpat.errors import MishpatError, UsageError
+from faithful_mishpat.formats import backup, registrypol
 from faithful_mishpat.outputs import render
 from faithful_mishpat.outputs.files import write_files
 from faithful_mishpat.outputs.safety import command_line, terminal
@@ -95,6 +97,16 @@ def build_parser() -> argparse.ArgumentParser:
             "or never"
         ),
     )
+    diff.add_argument(
+        "--max-pol-entries", type=_count, default=registrypol.MAX_ENTRIES, metavar="N",
+        help=f"most entries read from one Registry.pol (default: {registrypol.MAX_ENTRIES}); "
+        "more is a problem, so the run exits 1",
+    )  # fmt: skip
+    diff.add_argument(
+        "--max-scan-folders", type=_count, default=backup.MAX_SCAN_FOLDERS, metavar="N",
+        help="most folders listed below the search depth to look for backups "
+        f"(default: {backup.MAX_SCAN_FOLDERS}); more is a problem, so the run exits 1",
+    )  # fmt: skip
     diff.add_argument("--force", action="store_true", help="replace existing reports")
     diff.set_defaults(run=_compare)
 
@@ -128,8 +140,17 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(microsecond=0)
 
 
+_count = bounded(1, 1_000_000_000, "a whole number")
+
+
 def _compare(args: argparse.Namespace) -> int:
-    comparison, after, inputs = pipeline.run(args.before, args.after, match=args.match)
+    saved = registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS
+    registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS = args.max_pol_entries, args.max_scan_folders
+    try:
+        comparison, after, inputs = pipeline.run(args.before, args.after, match=args.match)
+    finally:
+        registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS = saved
+
     document = outputs.build_report(
         comparison,
         [vars(item) for item in inputs],
