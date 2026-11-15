@@ -34,7 +34,7 @@ inventory = importlib.util.module_from_spec(_inv_spec)
 _inv_spec.loader.exec_module(inventory)
 
 REPO = "faithful-oversight/faithful-mishpat"
-TAG = "v0.1.0"
+TAG = "v0.1.1"
 SHA = "a" * 40
 REF = pr.ReleaseRef(REPO, TAG, SHA)
 
@@ -220,12 +220,12 @@ def test_verify_pypi(assets: list[Path]) -> None:
         {"filename": p.name, "digests": {"sha256": pr.sha256(p)}} for p in dists
     ]
     data = {"urls": urls}
-    pr.verify_pypi("faithful-mishpat", "0.1.0", dists, fetch=lambda _: data)
+    pr.verify_pypi("faithful-mishpat", "0.1.1", dists, fetch=lambda _: data)
     urls[0]["digests"] = {"sha256": "0" * 64}
     with pytest.raises(pr.ReleaseError, match="different bytes"):
-        pr.verify_pypi("faithful-mishpat", "0.1.0", dists, fetch=lambda _: data)
+        pr.verify_pypi("faithful-mishpat", "0.1.1", dists, fetch=lambda _: data)
     with pytest.raises(pr.ReleaseError, match="differ from this build"):
-        pr.verify_pypi("faithful-mishpat", "0.1.0", dists, fetch=lambda _: {"urls": []})
+        pr.verify_pypi("faithful-mishpat", "0.1.1", dists, fetch=lambda _: {"urls": []})
 
 
 def test_main_reports_errors_and_runs_steps(

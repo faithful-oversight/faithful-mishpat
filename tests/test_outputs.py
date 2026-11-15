@@ -342,7 +342,7 @@ def make(comparison: Comparison | None = None, **kw: Any) -> dict[str, Any]:
     args: dict[str, Any] = {"after": after_snapshot()}
     args.update(kw)
     return build_report(
-        comparison or rich_comparison(), INPUTS, GENERATED, "0.1.0", OPTIONS, **args
+        comparison or rich_comparison(), INPUTS, GENERATED, "0.1.1", OPTIONS, **args
     )
 
 
@@ -454,7 +454,7 @@ def test_the_rich_report_follows_the_schema(rich_report: dict[str, Any]) -> None
         "https://faithful-oversight.github.io/faithful-mishpat/schema/report-v1.schema.json"
     )
     assert rich_report["schema_version"] == "1.0"
-    assert rich_report["tool"] == {"name": "mishpat", "version": "0.1.0"}
+    assert rich_report["tool"] == {"name": "mishpat", "version": "0.1.1"}
     assert rich_report["generated_at"] == "2026-11-05T09:30:00Z"
     assert rich_report["options"] == {"fail_on": "differences", "match": "guid", "verbose": False}
     assert list(rich_report["options"]) == sorted(rich_report["options"])
@@ -467,10 +467,10 @@ def test_every_category_kind_and_status_is_in_the_rich_data(rich_report: dict[st
 
 
 def test_an_empty_comparison_and_a_hostile_one_follow_the_schema() -> None:
-    schema_check("report-v1.schema.json", build_report(empty_comparison(), [], GENERATED, "0.1.0"))
+    schema_check("report-v1.schema.json", build_report(empty_comparison(), [], GENERATED, "0.1.1"))
     schema_check(
         "report-v1.schema.json",
-        build_report(hostile_comparison(FORMULA), INPUTS, GENERATED, "0.1.0", OPTIONS),
+        build_report(hostile_comparison(FORMULA), INPUTS, GENERATED, "0.1.1", OPTIONS),
     )
 
 
@@ -614,7 +614,7 @@ def test_build_report_does_not_alias_the_comparison() -> None:
         match="guid",
         differences=[diff(before=["x"], after={"k": ["y"]})],
     )
-    report = build_report(comparison, [], GENERATED, "0.1.0")
+    report = build_report(comparison, [], GENERATED, "0.1.1")
     report["differences"][0]["before"].append("changed")
     report["differences"][0]["after"]["k"].append("changed")
     assert comparison.differences[0].before == ["x"]
@@ -637,7 +637,7 @@ def test_a_comparison_the_schema_cannot_describe_is_refused(
         differences=[] if difference is None else [difference], pairs=pairs
     )
     with pytest.raises(ValueError, match="unknown"):
-        build_report(comparison, [], GENERATED, "0.1.0")
+        build_report(comparison, [], GENERATED, "0.1.1")
 
 
 def test_the_report_is_repeatable(rich_report: dict[str, Any]) -> None:
@@ -709,7 +709,7 @@ def test_limitations_are_plain_sentences() -> None:
 
 def test_headline_states() -> None:
     def head(**kw: Any) -> tuple[str, str]:
-        return r.headline(build_report(empty_comparison(**kw), [], GENERATED, "0.1.0"))
+        return r.headline(build_report(empty_comparison(**kw), [], GENERATED, "0.1.1"))
 
     assert head() == ("complete", "No differences. Every input was read in full.")
     one = head(differences=[diff()])
@@ -803,7 +803,7 @@ def test_markdown_reads_in_the_documented_order(rich_report: dict[str, Any]) -> 
     positions = [md.index(item) for item in order]
     assert positions == sorted(positions)
     assert "Before: before.xml. After: after.jsonl. GPOs paired by guid." in md
-    assert "Generated 2026-11-05T09:30:00Z by mishpat 0.1.0." in md
+    assert "Generated 2026-11-05T09:30:00Z by mishpat 0.1.1." in md
     assert "The two inputs share no GPO; try \\-\\-match name." not in md  # hyphens are not special
     assert "try --match name." in md
     assert "XML is not well formed" in md
@@ -908,7 +908,7 @@ def test_markdown_scope_level_section_and_kinds(rich_report: dict[str, Any]) -> 
 
 
 def test_markdown_with_nothing_to_show() -> None:
-    md = r.render_markdown(build_report(empty_comparison(), [], GENERATED, "0.1.0"))
+    md = r.render_markdown(build_report(empty_comparison(), [], GENERATED, "0.1.1"))
     assert "No GPOs were compared." in md
     assert "No GPO has a difference." in md
     assert "## Notices" not in md
@@ -917,7 +917,7 @@ def test_markdown_with_nothing_to_show() -> None:
     assert "## Domain structure" not in md
     assert "**No differences. Every input was read in full.**" in md
     quiet = empty_comparison(pairs=[pair(G_QUIET, "Quiet", "unchanged", 0)])
-    md = r.render_markdown(build_report(quiet, [], GENERATED, "0.1.0"))
+    md = r.render_markdown(build_report(quiet, [], GENERATED, "0.1.1"))
     assert "| Quiet |" in md
     assert "No GPO has a difference." in md
 
@@ -929,7 +929,7 @@ def test_a_difference_for_a_gpo_not_in_the_table_still_gets_a_section() -> None:
             diff(gpo=G_UNLISTED, gpo_name="Stray", subject="two"),
         ]
     )
-    report = build_report(comparison, [], GENERATED, "0.1.0")
+    report = build_report(comparison, [], GENERATED, "0.1.1")
     md = r.render_markdown(report)
     assert f"### Stray ({G_UNLISTED})" in md
     assert "Changed. 2 differences." in md
@@ -946,7 +946,7 @@ def test_markdown_with_a_gpo_whose_scope_rows_are_unsorted() -> None:
             diff(scope="Computer", area="a", subject="4"),
         ],
     )
-    md = r.render_markdown(build_report(comparison, [], GENERATED, "0.1.0"))
+    md = r.render_markdown(build_report(comparison, [], GENERATED, "0.1.1"))
     subs = [h for h in headings(md) if h.startswith("##### ")]
     assert subs == [
         "##### Computer · a",
@@ -968,7 +968,7 @@ def tables_are_regular(md: str) -> None:
 
 
 def test_markdown_cannot_be_forged_by_input_data() -> None:
-    md = r.render_markdown(build_report(hostile_comparison(), INPUTS, GENERATED, "0.1.0"))
+    md = r.render_markdown(build_report(hostile_comparison(), INPUTS, GENERATED, "0.1.1"))
     assert "\x1b" not in md
     assert RLO not in md
     assert "\\u202e" in md
@@ -986,7 +986,7 @@ def test_markdown_cannot_be_forged_by_input_data() -> None:
 
 def test_markdown_shortens_long_values_only_when_told_to() -> None:
     comparison, snapshot = crowded()
-    report = build_report(comparison, [], GENERATED, "0.1.0", after=snapshot)
+    report = build_report(comparison, [], GENERATED, "0.1.1", after=snapshot)
     short = r.render_markdown(report, shorten=True)
     assert "L" * 300 + "… (400 characters; full value in the JSON report)" in short
     assert "L" * 301 not in short
@@ -1003,7 +1003,7 @@ def test_a_value_of_exactly_the_limit_is_not_shortened() -> None:
         empty_comparison(differences=[diff(before=exact, after=exact + "y")]),
         [],
         GENERATED,
-        "0.1.0",
+        "0.1.1",
     )
     for page in (r.render_markdown(report), r.render_html(report)):
         assert "(300 characters" not in page  # the value at the limit is whole
@@ -1014,7 +1014,7 @@ def test_a_value_of_exactly_the_limit_is_not_shortened() -> None:
 @pytest.mark.parametrize("renderer", [r.render_markdown, r.render_html])
 def test_caps_apply_only_with_the_json_report(renderer: Any) -> None:
     comparison, snapshot = crowded()
-    report = build_report(comparison, [], GENERATED, "0.1.0", after=snapshot)
+    report = build_report(comparison, [], GENERATED, "0.1.1", after=snapshot)
     whole = renderer(report, shorten=False)
     assert "JSON report" not in whole
     last = [
@@ -1058,7 +1058,7 @@ def test_caps_apply_only_with_the_json_report(renderer: Any) -> None:
 def test_a_cut_group_does_not_leave_a_dangling_heading() -> None:
     comparison, snapshot = crowded()
     capped = r.render_markdown(
-        build_report(comparison, [], GENERATED, "0.1.0", after=snapshot), shorten=True
+        build_report(comparison, [], GENERATED, "0.1.1", after=snapshot), shorten=True
     )
     section = capped[capped.index("### Servers Baseline") : capped.index("### GPO 000")]
     assert "Computer · Area A" in section
@@ -1069,7 +1069,7 @@ def test_a_cut_group_does_not_leave_a_dangling_heading() -> None:
 def test_terminal_summary_is_plain_and_safe(rich_report: dict[str, Any]) -> None:
     text = r.terminal_summary(rich_report)
     lines = text.splitlines()
-    assert lines[0] == "mishpat 0.1.0"
+    assert lines[0] == "mishpat 0.1.1"
     assert lines[1].startswith(
         "20 differences across 6 GPOs and the domain's structure (2 GPOs in only one input). "
         "Incomplete:"
@@ -1078,8 +1078,8 @@ def test_terminal_summary_is_plain_and_safe(rich_report: dict[str, Any]) -> None
     assert "  GPO: 5" in lines
     assert "  1 notice: read them first." in lines
     assert lines[-1] == "  See Problems in the report before relying on this result."
-    ok = r.terminal_summary(build_report(empty_comparison(), [], GENERATED, "0.1.0"))
-    assert ok == "mishpat 0.1.0\nNo differences. Every input was read in full."
+    ok = r.terminal_summary(build_report(empty_comparison(), [], GENERATED, "0.1.1"))
+    assert ok == "mishpat 0.1.1\nNo differences. Every input was read in full."
     hostile = r.terminal_summary(
         build_report(
             replace(hostile_comparison(), notices=["a", "b"]), [], GENERATED, "0.1.\x1b[2J\r"
@@ -1127,7 +1127,7 @@ def parse(page: str) -> Tags:
 
 
 def test_html_cannot_be_forged_by_input_data() -> None:
-    page = r.render_html(build_report(hostile_comparison(), INPUTS, GENERATED, "0.1.0"))
+    page = r.render_html(build_report(hostile_comparison(), INPUTS, GENERATED, "0.1.1"))
     parsed = parse(page)
     assert parsed.bad == []
     assert "script" not in parsed.tags
@@ -1187,7 +1187,7 @@ def test_html_is_one_self_contained_accessible_page(rich_report: dict[str, Any])
 
 
 def test_html_for_an_empty_comparison_and_a_complete_one() -> None:
-    page = r.render_html(build_report(empty_comparison(), [], GENERATED, "0.1.0"))
+    page = r.render_html(build_report(empty_comparison(), [], GENERATED, "0.1.1"))
     assert "No GPOs were compared." in page
     assert "No GPO has a difference." in page
     assert "✔ Complete" in page
@@ -1195,7 +1195,7 @@ def test_html_for_an_empty_comparison_and_a_complete_one() -> None:
     assert 'href="#scope"' not in page
     assert parse(page).bad == []
     quiet = empty_comparison(pairs=[pair(G_QUIET, "Quiet", "unchanged", 0)])
-    page = r.render_html(build_report(quiet, [], GENERATED, "0.1.0"))
+    page = r.render_html(build_report(quiet, [], GENERATED, "0.1.1"))
     assert "<td>unchanged</td>" in page
     assert "<a href" not in page.split('<h2 id="gpos">')[1].split('<h2 id="changes">')[0]
 
@@ -1210,7 +1210,7 @@ def one_difference(*differences: Difference, **kw: Any) -> dict[str, Any]:
         pairs=[pair(g, n, "changed", 1) for g, n in sorted(pairs)],
         **kw,
     )
-    return build_report(comparison, [], GENERATED, "0.1.0")
+    return build_report(comparison, [], GENERATED, "0.1.1")
 
 
 def policy(before: dict[str, Any], after: dict[str, Any]) -> Difference:
@@ -1539,7 +1539,7 @@ def test_the_comparison_sides_are_named_in_every_report() -> None:
         differences=[diff()],
         pairs=[pair(G_SERVERS, "Servers Baseline", "changed", 1)],
     )
-    report = build_report(comparison, [], GENERATED, "0.1.0")
+    report = build_report(comparison, [], GENERATED, "0.1.1")
     assert report["comparison"]["before"] == "corp-before.jsonl"
     assert report["comparison"]["after"] == "corp-after.jsonl"
     assert "Before: corp-before.jsonl. After: corp-after.jsonl." in r.render_markdown(report)
@@ -1633,7 +1633,7 @@ def test_csv_neutralises_formulas_and_keeps_full_values() -> None:
             diff(subject="4", before="-1", after=-5),
         ]
     )
-    text = r.render_csv(build_report(comparison, [], GENERATED, "0.1.0"))
+    text = r.render_csv(build_report(comparison, [], GENERATED, "0.1.1"))
     rows = rows_of(text)
     assert rows[1][3] == "'" + FORMULA
     assert rows[1][6] == "'+cmd"
@@ -1655,7 +1655,7 @@ def test_csv_neutralises_formulas_and_keeps_full_values() -> None:
 
 
 def test_csv_with_no_differences_is_the_header_alone() -> None:
-    text = r.render_csv(build_report(empty_comparison(), [], GENERATED, "0.1.0"))
+    text = r.render_csv(build_report(empty_comparison(), [], GENERATED, "0.1.1"))
     assert len(rows_of(text)) == 1
 
 
@@ -1679,7 +1679,7 @@ def test_write_reports_writes_every_format_and_a_manifest(
     assert list(FILE_NAMES.values()) == [p.name for p in written[:-1]]
     manifest = json.loads(written[-1].read_text(encoding="utf-8"))
     schema_check("manifest-v1.schema.json", manifest)
-    assert manifest["tool"] == {"name": "mishpat", "version": "0.1.0"}
+    assert manifest["tool"] == {"name": "mishpat", "version": "0.1.1"}
     assert manifest["generated_at"] == rich_report["generated_at"]
     assert [f["name"] for f in manifest["files"]] == [p.name for p in written[:-1]]
     for entry, path in zip(manifest["files"], written, strict=False):
@@ -1717,7 +1717,7 @@ def test_two_runs_write_identical_bytes(tmp_path: Path) -> None:
 
 def test_the_json_report_decides_whether_markdown_and_html_shorten(tmp_path: Path) -> None:
     comparison, snapshot = crowded()
-    report = build_report(comparison, [], GENERATED, "0.1.0", after=snapshot)
+    report = build_report(comparison, [], GENERATED, "0.1.1", after=snapshot)
     with_json = write_reports(report, tmp_path / "a", ["json", "md", "html", "csv"], force=False)
     without = write_reports(report, tmp_path / "b", ["md", "html", "csv"], force=False)
     for path in with_json:
@@ -1770,7 +1770,7 @@ def test_write_reports_rejects_unknown_or_no_formats(
 
 
 def test_hostile_values_survive_a_round_trip_through_every_file(tmp_path: Path) -> None:
-    report = build_report(hostile_comparison(FORMULA), INPUTS, GENERATED, "0.1.0", OPTIONS)
+    report = build_report(hostile_comparison(FORMULA), INPUTS, GENERATED, "0.1.1", OPTIONS)
     written = write_reports(report, tmp_path, ["json", "md", "html", "csv"], force=False)
     for path in written:
         path.read_text(encoding="utf-8")

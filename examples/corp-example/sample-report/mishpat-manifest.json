@@ -3,24 +3,24 @@
   "schema_version": "1.0",
   "tool": {
     "name": "mishpat",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "generated_at": "2026-11-09T12:00:00Z",
   "files": [
     {
       "name": "mishpat-report.json",
       "size": 25452,
-      "sha256": "69f75a18a308eebcc6f2b7ee6a48402975c17d8dba9c4c9282cb93b07757efa1"
+      "sha256": "9032dbe5371f38a436b4a638fa23c325619ad726165bb71e6564645a61e157d9"
     },
     {
       "name": "mishpat-report.md",
       "size": 12863,
-      "sha256": "9b891b7ef1cb7e62769521ec3d1820f9f8328daf04800b5ae2a94b4d52cff745"
+      "sha256": "4ab72aeffb41368ea2afe6706a4a82e4b0d1c9947a7b4e192d98301f4f93daee"
     },
     {
       "name": "mishpat-report.html",
       "size": 23936,
-      "sha256": "9c38dd2a9135547885a1a893ac6be4cc5f0b270aa4f67c837342e4331cba0b76"
+      "sha256": "63d986e13efa067e6ca9e56fbdb113cd17761f93952ec830d57108ef3a147ffe"
     },
     {
       "name": "mishpat-differences.csv",

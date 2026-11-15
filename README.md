@@ -5,7 +5,13 @@
 [![CI](https://github.com/faithful-oversight/faithful-mishpat/actions/workflows/ci.yml/badge.svg)](https://github.com/faithful-oversight/faithful-mishpat/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: first release.** mishpat reads Group Policy exports end to end and is tested on synthetic data. The two ways to collect an export, the PowerShell exporter and `mishpat collect`, have not yet been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md).
+> **Status: version 0.1.1, beta, not yet on PyPI.** mishpat reads Group Policy exports end to end and is tested on synthetic data. The two ways to collect an export, the PowerShell exporter and `mishpat collect`, have not yet been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md).
+
+Documentation is in the [docs folder](docs/index.md). It is also shown on GitHub at [docs](https://github.com/faithful-oversight/faithful-mishpat/tree/main/docs).
+
+## How it differs from existing tools
+
+Group Policy tools mostly fall into three groups: consoles that show one GPO's settings or compare two GPOs, scripts that export a report and leave you to compare the files, and analyzers that check settings against a baseline. mishpat does a different job. It compares two versions of the same policy set, including the context around each GPO (links, order, filters, owner, permissions), and writes a report built for review: every difference cites its source, lists are compared as sets, and the report states what it could not read or compare. It reads exports offline and changes nothing. It is not a replacement for any of those tools, and it does not judge a setting as good or bad.
 
 ## About the name
 
@@ -15,22 +21,26 @@
 
 A change to Group Policy is hard to review. A GPO holds hundreds of settings, and what a setting does depends on where the GPO is linked, in what order, with what filters. mishpat compares two versions and writes the difference in a form you can paste into a pull request or a change record:
 
-| Subject | Kind | Before | After |
-| --- | --- | --- | --- |
-| LockoutBadCount | changed | 10 | 5 |
-| `Network security: LAN Manager authentication level` | changed | 3 | 5 |
-| corp.example/Workstations | changed | enabled: true; enforced: false | enabled: true; enforced: true |
-
 mishpat:
 
 - Compares two versions of one GPO, a selection of GPOs, or a whole domain, setting by setting.
 - Reads `Get-GPOReport` XML files, `Backup-GPO` folders, and its own export bundle. It detects each from its content.
-- Includes the context around each GPO: whether each half is enabled, links with their enabled and enforced state, security filtering and delegation, and the WMI filter. With an export bundle it also compares link order, blocked inheritance on organizational units, and WMI filter queries.
+- Includes the context around each GPO: whether each half is enabled, links with their enabled and enforced state, security filtering and delegation, the owner and primary group, and the WMI filter. With an export bundle it also compares link order, blocked inheritance on organizational units, and WMI filter queries.
 - Treats lists as sets, so members listed in a new order are not a change. It ignores modified times and version numbers, so saving a GPO without a change shows nothing.
 - Says what it did not compare. When an input does not record something, such as link order in a `Get-GPOReport` file, the report says so. It does not invent a difference.
 - Says whether every input was read in full. A part that could not be read is a problem, and the comparison is then incomplete.
 - Writes one report in four forms: JSON, Markdown, HTML, and CSV, plus a manifest with the SHA-256 of every file and both inputs.
 - Cites the source of every difference, so a reviewer can check it by hand.
+
+A real excerpt from the committed example report ([examples/corp-example](examples/corp-example/sample-report/mishpat-report.md)), whose headline reads `27 differences across 5 GPOs and the domain's structure. Every input was read in full.`:
+
+| Subject | Kind | Before | After |
+| --- | --- | --- | --- |
+| LockoutBadCount | changed | 10 | 5 |
+| `Network security: LAN Manager authentication level` | changed | 3 (Send NTLMv2 response only) | 5 (Send NTLMv2 response only. Refuse LM & NTLM) |
+| corp.example/Workstations | changed | enforced: false | enforced: true |
+
+The report also lists the sources of each row. This excerpt leaves them out.
 
 ## What it will not do
 
@@ -46,9 +56,14 @@ See [Limitations](docs/limitations.md) for the full list.
 
 mishpat needs Python 3.11 or newer. Reading files needs no other packages.
 
+PyPI publishing is being set up. Until a PyPI release exists, install from GitHub:
+
 ```shell
-pipx install faithful-mishpat
+pipx install git+https://github.com/faithful-oversight/faithful-mishpat
+pipx ensurepath
 ```
+
+For a fixed version, add the tag: `pipx install git+https://github.com/faithful-oversight/faithful-mishpat@v0.1.1`. `pipx ensurepath` puts the `mishpat` command on your PATH; open a new terminal afterwards.
 
 Remote collection needs the `live` extra. Each secret provider has its own extra:
 
@@ -61,16 +76,16 @@ Remote collection needs the `live` extra. Each secret provider has its own extra
 | `azure` | `azure-identity`, `azure-keyvault-secrets` | `--secret azure:...` |
 
 ```shell
-pipx install "faithful-mishpat[live]"
-pipx install "faithful-mishpat[live,vault]"
+pipx install "faithful-mishpat[live] @ git+https://github.com/faithful-oversight/faithful-mishpat"
+pipx install "faithful-mishpat[live,vault] @ git+https://github.com/faithful-oversight/faithful-mishpat"
 ```
 
-Until the first release is on PyPI, install the wheel file from a release, or work from source as [CONTRIBUTING.md](CONTRIBUTING.md) describes.
+To work from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start
 
 ```shell
-pipx install faithful-mishpat
+pipx install git+https://github.com/faithful-oversight/faithful-mishpat
 mishpat example ./mishpat-demo
 mishpat compare ./mishpat-demo/corp-before.jsonl ./mishpat-demo/corp-after.jsonl -o ./mishpat-demo/report
 ```
@@ -138,6 +153,10 @@ Please do not report security problems in public issues. See [SECURITY.md](SECUR
 ## Contributing
 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md) first.
+
+## Trademarks
+
+Microsoft, Windows, Active Directory, Group Policy, and PowerShell are trademarks of the Microsoft group of companies. mishpat is an independent project. It is not affiliated with, endorsed by, or sponsored by Microsoft, and it does not certify compliance with any standard.
 
 ## License
 

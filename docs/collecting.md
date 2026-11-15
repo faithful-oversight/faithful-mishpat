@@ -127,7 +127,7 @@ mishpat collect --server dc01.corp.example --all --auth ntlm --username 'CORP\au
 Install the `live` extra, which adds `pypsrp`:
 
 ```shell
-pipx install "faithful-mishpat[live]"
+pipx install "faithful-mishpat[live] @ git+https://github.com/faithful-oversight/faithful-mishpat"
 ```
 
 You also need:

@@ -2,7 +2,7 @@
 
 **27 differences across 5 GPOs and the domain's structure. Every input was read in full.**
 
-Before: corp-before.jsonl. After: corp-after.jsonl. GPOs paired by guid. Generated 2026-11-09T12:00:00Z by mishpat 0.1.0.
+Before: corp-before.jsonl. After: corp-after.jsonl. GPOs paired by guid. Generated 2026-11-09T12:00:00Z by mishpat 0.1.1.
 
 ## GPOs compared
 

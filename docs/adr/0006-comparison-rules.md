@@ -31,7 +31,7 @@ Group Policy adds problems of its own:
 - **Whole domains.** Report a GPO that is missing from one input as `removed` or `added` only when both inputs are whole domains. Otherwise report `only-before` or `only-after`, and add a notice.
 - **Registry.pol.** Compare `Registry.pol` values only when both inputs are backups or bundles read in full. Keep directives as entries of their own and never apply them.
 - **Security filtering and delegation.** Compare security filtering as the set of trustees with an allow entry for Apply Group Policy. Compare every other entry as delegation, by SID, and by allow or deny.
-- **Owner, group and raw descriptor.** Compare the owner and the primary group, and compare a permission entry with no named right by its access mask. Compare the raw SDDL text last and list it only when nothing named explains the change. Whatever the reader cannot interpret is a problem (the comparison is incomplete) or a gap (the input does not record it). The comparison never reports a clean result for a part it did not compare.
+- **Owner, group, and raw descriptor.** Compare the owner and the primary group, and compare a permission entry with no named right by its access mask. Compare the raw SDDL text last and list it only when nothing named explains the change. Whatever the reader cannot interpret is a problem (the comparison is incomplete) or a gap (the input does not record it). The comparison never reports a clean result for a part it did not compare.
 - **WMI filters.** Compare name and description. Compare the query only when both inputs record it. Never evaluate a filter.
 - **Every difference keeps its sources.** Each difference carries where each side was read, so a reviewer can check it by hand.
 

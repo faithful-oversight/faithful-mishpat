@@ -6,8 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
 ### Fixed
 
+- A changed GPO owner or primary group, an added trustee with a custom access mask, a changed mask, and a change in the raw security descriptor are now compared. They were passed over while the report said "No differences. Every input was read in full."
+- A permission entry or security descriptor text that mishpat cannot read is now a problem, so the comparison is incomplete. An input that records none of the owner, group or descriptor text is listed under Not compared.
+- A backup folder more than four levels below the input, or inside another backup, is now a problem. It was skipped while the report said every input was read in full.
+- The exit code survives a summary that cannot be printed. A closed pipe or a stream that cannot encode a character in a path no longer turns a finished run into exit 4; unencodable characters are written as backslash escapes.
+- A number of thousands of digits in a report no longer ends the run with an internal error. Numbers are read as numbers only when they are one to 20 ASCII digits.
+- A value that changes only its type, such as the text "5" becoming the number 5, now shows its type in the Markdown, HTML and CSV reports.
+- Two scopes in a bundle that read as the same path (such as `OU=A/B` and `OU=B` inside `OU=A`) are now a problem, because a change to one of their links could not be told apart.
+- Rendering Markdown and HTML no longer slows down sharply with thousands of changed GPOs.
+- A `Registry.pol` file is read up to 100,000 entries, and a larger one is a problem, which bounds memory use.
+- Text that follows a child element, and nested elements named `Blocked` or `ReadTime`, are now compared inside an extension mishpat has no reader for.
+- A `Registry.pol` string that starts like the internal password stand-in is no longer shown as a stored password.
+- A bundle saved with a byte order mark or as UTF-16 is now named as such instead of as bad XML.
+- Error messages for an input that cannot be read now name the path as you gave it, not only the file name.
 - The source archive's own tests now run in the build check: it unpacks the archive outside the checkout and runs the whole suite there, instead of only collecting the tests.
 - Editing a pull request title now reruns the title check, so a corrected title clears the required check.
 - The dependency audit writes its export to a private temporary directory, so a planted link or a second run at the same time cannot interfere.
@@ -15,6 +30,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The release script now treats only a clean "not found" answer as an absent tag; an authentication, rate-limit, network, or malformed answer stops the release.
 - The dependency audit always includes every optional extra, and a new check fails it when a package named by an extra is missing from the audited export.
 - The release evidence is now one SBOM per scope: `sbom-base.cdx.json` for the base install, and `sbom-all-extras.cdx.json` when the project defines optional extras. Each states its scope, and tests check what each one holds.
+
+### Changed
+
+- Reports now show a space that looks like a plain space (a no-break space, for example) as a visible escape, and a plain negative number in the CSV is no longer prefixed with an apostrophe.
+- The summary prints through one place, so every command decides its exit code before it prints.
+- The README leads with an install route that works today (`pipx install git+https://github.com/faithful-oversight/faithful-mishpat`), a status line, how mishpat differs from other tools, and real output from the example.
+- Removed unused code and the unused `moment` argument type.
+
+### Security
+
+- A closed output stream can no longer change the exit code of a run, so a pipeline always sees the real result.
 
 ## [0.1.0] - 2026-11-11
 
