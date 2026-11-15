@@ -28,8 +28,8 @@ later entry wins: the setting holds the last entry's value and source, keeps the
 of the first, and records ``occurrences`` in its context when there was more than one.
 
 A file that cannot be read produces a problem, never an exception. A wrong signature or
-version gives no settings; a damaged entry stops the read and keeps the entries before it.
-Either way ``ok`` is false.
+version gives no settings; a damaged entry stops the read and keeps the entries before it, as
+does the entry after the first :data:`MAX_ENTRIES`. Either way ``ok`` is false.
 """
 
 from __future__ import annotations
@@ -56,6 +56,12 @@ TYPE_NAMES = {
     10: "REG_RESOURCE_REQUIREMENTS_LIST",
     11: "REG_QWORD",
 }
+MAX_ENTRIES = 100_000
+"""Most entries read from one file. A real ``Registry.pol`` holds at most a few thousand.
+
+Each entry becomes a setting, and a changed one a difference and a report record: about 5 KB
+of memory and 760 bytes of JSON for a 41-byte entry, so the limit keeps a crafted file of
+64 MiB (over a million entries) from needing gigabytes."""
 _HEADER = 8
 _SZ = (1, 2)
 _MULTI_SZ = 7
@@ -192,6 +198,12 @@ def read_registry_pol(data: bytes, scope: str, base: Source) -> PolRead:
     number = 0
     while position < len(data):
         number += 1
+        if number > MAX_ENTRIES:
+            problem(
+                f"Registry.pol holds more than {MAX_ENTRIES} entries; "
+                f"the entries after the first {MAX_ENTRIES} were not read"
+            )
+            break
         try:
             entry, position = _entry(data, position)
         except _DamagedError as exc:
