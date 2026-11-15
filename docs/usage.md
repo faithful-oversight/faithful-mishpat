@@ -29,6 +29,7 @@ mishpat compare BEFORE AFTER -o DIR [options]
 | `--fail-on` | When to exit with code `1`: `differences` (default), `incomplete`, or `never`. See [Exit code of compare](#exit-code-of-compare). |
 | `--max-pol-entries` | Most entries read from one `Registry.pol` file. Default: 1,000,000. A file with more is a problem: the entries after the limit are not read, the report says so, the comparison is incomplete, and the exit code is `1`. Raise it for an unusually large file. |
 | `--max-scan-folders` | Most folders listed below the backup search depth, only to look for a backup that would not be read. Default: 200,000. Reaching it is a problem, so the comparison is incomplete and the exit code is `1`. |
+| `--max-xml-elements` | Most XML elements held in memory at once while reading one XML file. Default: 1,000,000. A `<GPOS>` file is read one GPO at a time, so this bounds one GPO, not the whole file. A file over the limit is refused (exit code `3`); a small file inside a backup that is over it is a problem (exit code `1`). Raise it only for a single very large GPO. |
 | `--force` | Replace report files that already exist. Without it, mishpat refuses. |
 
 The two sides can be different kinds. You can compare a `Backup-GPO` folder with an export bundle, for example. mishpat compares only what both sides record, and it lists the rest under [Not compared](output.md#not-compared).

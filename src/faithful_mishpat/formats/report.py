@@ -1227,45 +1227,54 @@ def read_report(data: bytes, base: Source) -> ReportRead:
             root other than ``<GPO>`` and ``<GPOS>``).
     """
     prefix = f"{base.file} is not a Get-GPOReport XML file: "
-    try:
-        root = xmlsafe.parse(data)
-    except xmlsafe.XmlError as exc:
-        raise InputError(prefix + str(exc)) from None
-    uri, local = xmlsafe.split(root.tag)
     result = ReportRead()
-    if (uri, local) == (SETTINGS, "GPO"):
-        entries = [(root, base)]
-    elif (uri, local) == ("", "GPOS"):
-        result.wrapped = True
-        entries = []
-        for number, child in enumerate(root, 1):
-            where = Source(base.file, f"{base.detail} GPO[{number}]".strip())
-            if xmlsafe.split(child.tag) == (SETTINGS, "GPO"):
-                entries.append((child, where))
-            else:
-                result.problems.append(
-                    Problem(
-                        where, f"Unexpected element <{_local(child)[:40]}> in <GPOS> was skipped"
-                    )
-                )
-        if not len(root):
-            result.problems.append(Problem(base, "The <GPOS> element holds no GPO"))
-    else:
-        raise InputError(prefix + f"the root element is <{local[:40]}>, not <GPO> or <GPOS>")
     seen: dict[str, Source] = {}
-    for element, where in entries:
+    count = 0
+
+    def read_one(element: ET.Element, where: Source) -> None:
         try:
             gpo = _gpo(element, where, result.problems)
         except _BadGpoError as exc:
             result.problems.append(Problem(where, f"This GPO was not read: {exc}"))
-            continue
+            return
         if gpo.guid in seen:
             result.problems.append(
                 Problem(where, f"The GPO {gpo.guid} appears twice; the later one was not read")
             )
-            continue
+            return
         seen[gpo.guid] = where
         result.gpos.append(gpo)
+
+    def receive(child: ET.Element) -> None:
+        # A child of <GPOS> is read as soon as it is complete, then dropped from the tree, so
+        # a capture of a whole domain is read one GPO at a time and not held whole.
+        nonlocal count
+        count += 1
+        where = Source(base.file, f"{base.detail} GPO[{count}]".strip())
+        if xmlsafe.split(child.tag) == (SETTINGS, "GPO"):
+            read_one(child, where)
+        else:
+            result.problems.append(
+                Problem(where, f"Unexpected element <{_local(child)[:40]}> in <GPOS> was skipped")
+            )
+
+    try:
+        root = xmlsafe.parse(
+            data,
+            max_elements=xmlsafe.MAX_ELEMENTS,
+            take=(("GPOS", "*"), receive),
+        )
+    except xmlsafe.XmlError as exc:
+        raise InputError(prefix + str(exc)) from None
+    uri, local = xmlsafe.split(root.tag)
+    if (uri, local) == (SETTINGS, "GPO"):
+        read_one(root, base)
+    elif (uri, local) == ("", "GPOS"):
+        result.wrapped = True
+        if not count:
+            result.problems.append(Problem(base, "The <GPOS> element holds no GPO"))
+    else:
+        raise InputError(prefix + f"the root element is <{local[:40]}>, not <GPO> or <GPOS>")
     return result
 
 

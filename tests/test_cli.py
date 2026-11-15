@@ -22,7 +22,7 @@ from jsonschema.validators import validator_for
 from faithful_mishpat import __version__, cli, example, pipeline
 from faithful_mishpat.cli import ExitCode, main
 from faithful_mishpat.collect import secrets
-from faithful_mishpat.formats import registrypol
+from faithful_mishpat.formats import registrypol, xmlsafe
 from faithful_mishpat.outputs import FILE_NAMES, MANIFEST_NAME
 from tests import fixtures_gpo as fx
 
@@ -767,3 +767,12 @@ def test_the_limit_options_refuse_nonsense(
     pair: tuple[Path, Path], tmp_path: Path, option: str, value: str
 ) -> None:
     assert compare(*pair, tmp_path / "o", option, value) == ExitCode.USAGE
+
+
+def test_the_xml_element_limit_is_refused_and_can_be_raised(
+    pair: tuple[Path, Path], tmp_path: Path
+) -> None:
+    assert compare(*pair, tmp_path / "o", "--max-xml-elements", "10") == ExitCode.INPUT_ERROR
+    assert not (tmp_path / "o").exists()
+    assert compare(*pair, tmp_path / "o2", "--max-xml-elements", "100000") == ExitCode.FINDINGS
+    assert xmlsafe.MAX_ELEMENTS == 1_000_000

@@ -19,7 +19,7 @@ from faithful_mishpat.collect import cli as collect_cli
 from faithful_mishpat.collect.secrets import redact
 from faithful_mishpat.compare import MATCHES
 from faithful_mishpat.errors import MishpatError, UsageError
-from faithful_mishpat.formats import backup, registrypol
+from faithful_mishpat.formats import backup, registrypol, xmlsafe
 from faithful_mishpat.outputs import render
 from faithful_mishpat.outputs.files import write_files
 from faithful_mishpat.outputs.safety import command_line, terminal
@@ -107,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="most folders listed below the search depth to look for backups "
         f"(default: {backup.MAX_SCAN_FOLDERS}); more is a problem, so the run exits 1",
     )  # fmt: skip
+    diff.add_argument(
+        "--max-xml-elements", type=_count, default=xmlsafe.MAX_ELEMENTS, metavar="N",
+        help="most XML elements held at once while reading one report "
+        f"(default: {xmlsafe.MAX_ELEMENTS}); more is refused, so the run exits 3",
+    )  # fmt: skip
     diff.add_argument("--force", action="store_true", help="replace existing reports")
     diff.set_defaults(run=_compare)
 
@@ -144,12 +149,14 @@ _count = bounded(1, 1_000_000_000, "a whole number")
 
 
 def _compare(args: argparse.Namespace) -> int:
-    saved = registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS
-    registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS = args.max_pol_entries, args.max_scan_folders
+    saved = registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS, xmlsafe.MAX_ELEMENTS
+    registrypol.MAX_ENTRIES = args.max_pol_entries
+    backup.MAX_SCAN_FOLDERS = args.max_scan_folders
+    xmlsafe.MAX_ELEMENTS = args.max_xml_elements
     try:
         comparison, after, inputs = pipeline.run(args.before, args.after, match=args.match)
     finally:
-        registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS = saved
+        registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS, xmlsafe.MAX_ELEMENTS = saved
 
     document = outputs.build_report(
         comparison,

@@ -123,3 +123,27 @@ def test_huge_text_is_read_in_one_piece() -> None:
 def test_arbitrary_bytes_never_raise_anything_else(data: bytes) -> None:
     with contextlib.suppress(xmlsafe.XmlError):
         xmlsafe.parse(data)
+
+
+# --- elements held at once (memory amplification) -----------------------------------------
+
+
+def test_too_many_elements_held_at_once_is_refused() -> None:
+    with pytest.raises(xmlsafe.XmlError, match="more than 5 elements at once"):
+        xmlsafe.parse(b"<r>" + b"<c/>" * 10 + b"</r>", max_elements=5)
+
+
+def test_a_total_limit_counts_every_element() -> None:
+    with pytest.raises(xmlsafe.XmlError, match="more than 5 elements"):
+        xmlsafe.parse(b"<r>" + b"<c/>" * 10 + b"</r>", max_total=5)
+
+
+def test_taken_elements_are_handed_over_and_dropped() -> None:
+    seen: list[str] = []
+    root = xmlsafe.parse(
+        b"<r>" + b"<c><d/></c>" * 100 + b"</r>",
+        max_elements=5,  # 100 children of 2 elements would not fit if they were kept
+        take=(("r", "*"), lambda e: seen.append(e.tag)),
+    )
+    assert seen == ["c"] * 100
+    assert len(root) == 0

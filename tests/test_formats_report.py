@@ -1293,3 +1293,24 @@ def test_extension_level_read_time_is_still_left_out() -> None:
         "Vendor/Thing", "<q1:ReadTime>now</q1:ReadTime><q1:Thing><q1:A>1</q1:A></q1:Thing>"
     )
     assert len(one(computer=ext).settings) == 1
+
+
+# --- a <GPOS> file is read one GPO at a time ---------------------------------------------
+
+
+def test_a_gpos_file_is_not_held_whole(monkeypatch: pytest.MonkeyPatch) -> None:
+    gpos = [fx.gpo_xml(f"{n:08x}-aaaa-4aaa-8aaa-000000000001", f"G{n}") for n in range(40)]
+    data = fx.report_bytes(*gpos, wrapped=True)
+    whole = read_report(data, Source("r.xml"))
+    monkeypatch.setattr(xmlsafe, "MAX_ELEMENTS", 400)  # one GPO fits, forty do not
+    streamed = read_report(data, Source("r.xml"))
+    assert [g.guid for g in streamed.gpos] == [g.guid for g in whole.gpos]
+    assert len(streamed.gpos) == 40
+
+
+def test_a_gpo_over_the_element_limit_is_refused_naming_the_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(xmlsafe, "MAX_ELEMENTS", 10)
+    with pytest.raises(InputError, match=r"r\.xml is not a Get-GPOReport XML file: .*10 elements"):
+        read_report(fx.report_bytes(fx.gpo_xml()), Source("r.xml"))

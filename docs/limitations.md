@@ -104,6 +104,7 @@ mishpat refuses or reports as a problem:
 - A single file inside a backup larger than 64 MiB.
 - A bundle with more than 100,000 files, or more than 1 GiB of file bytes.
 - A `Registry.pol` file with more than 1,000,000 entries (change it with `--max-pol-entries`): the entries after that are not read, the report lists a problem, and the run exits 1.
+- XML that holds more than 1,000,000 elements in memory at once (change it with `--max-xml-elements`). A `<GPOS>` file is read one GPO at a time, so the limit applies to one GPO. A file over it is refused, and one inside a backup is a problem.
 - XML that nests elements more than 64 levels deep.
 - A backup folder more than four levels below the folder you gave. It is not read, and the report lists it as a problem. If the search below that depth passes 200,000 folders (change it with `--max-scan-folders`), it stops, says so as a problem, and the run exits 1.
 

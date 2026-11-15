@@ -354,7 +354,7 @@ class _Reader:
     def xml(self, path: str) -> ET.Element | None:
         """Read and parse a small XML file; a failure is recorded and gives ``None``."""
         try:
-            return xmlsafe.parse(self.tree.read(path))
+            return xmlsafe.parse(self.tree.read(path), max_elements=xmlsafe.MAX_ELEMENTS)
         except TreeError as exc:
             self.problem(path, str(exc))
         except xmlsafe.XmlError as exc:

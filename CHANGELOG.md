@@ -38,6 +38,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Reading XML now limits the elements held in memory at once (default 1,000,000, change it with `mishpat compare --max-xml-elements`), and a `<GPOS>` capture of a whole domain is read one GPO at a time instead of being held whole. A small file of empty elements could otherwise need gigabytes. A file over the limit is refused (exit 3). The shared `xmlsafe.py` now matches faithful-shaar's.
 - Reports now show a space that looks like a plain space (a no-break space, for example) as a visible escape, and a plain negative number in the CSV is no longer prefixed with an apostrophe.
 - The summary prints through one place, so every command decides its exit code before it prints.
 - The README leads with an install route that works today (`pipx install git+https://github.com/faithful-oversight/faithful-mishpat`), a status line, how mishpat differs from other tools, and real output from the example.
