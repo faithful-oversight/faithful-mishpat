@@ -127,3 +127,14 @@ def test_a_cpassword_child_element_is_hidden_too() -> None:
     (setting,) = result.gpos[0].settings
     assert STORED_A not in repr(setting)
     assert hidden.conceal(setting.value)["properties"]["cPassword"] == hidden.SHOWN
+
+
+def test_a_value_that_starts_like_a_stand_in_is_not_one() -> None:
+    forged = hidden.PREFIX + "aaa"
+    assert hidden.conceal(forged) == forged
+    assert hidden.conceal({"data": forged}) == {"data": forged}
+    assert hidden.password_changed(forged, hidden.PREFIX + "bbb") is False  # plain text
+
+
+def test_a_real_stand_in_is_still_concealed() -> None:
+    assert hidden.conceal(hidden.hide("secret")) == hidden.SHOWN

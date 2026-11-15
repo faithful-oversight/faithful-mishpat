@@ -24,11 +24,21 @@ NAMES = frozenset({"cpassword"})
 _KEY = secrets.token_bytes(32)
 
 
+class Hidden(str):
+    """A stand-in for a stored password.
+
+    Stand-ins are recognised by this type, never by their text, so no value read from a
+    file (a ``Registry.pol`` string can hold any characters) can pass for one.
+    """
+
+    __slots__ = ()
+
+
 def hide(value: str) -> str:
     """Return a stand-in for a stored password, or ``""`` when none is stored."""
     if not value:
         return ""
-    return PREFIX + hmac.new(_KEY, value.encode("utf-8"), hashlib.sha256).hexdigest()
+    return Hidden(PREFIX + hmac.new(_KEY, value.encode("utf-8"), hashlib.sha256).hexdigest())
 
 
 def is_hidden_name(name: str) -> bool:
@@ -39,7 +49,7 @@ def is_hidden_name(name: str) -> bool:
 def conceal(value: Any) -> Any:
     """Return ``value`` with every stand-in replaced by :data:`SHOWN`."""
     if isinstance(value, str):
-        return SHOWN if value.startswith(PREFIX) else value
+        return SHOWN if isinstance(value, Hidden) else value
     if isinstance(value, dict):
         return {k: conceal(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
@@ -49,7 +59,7 @@ def conceal(value: Any) -> Any:
 
 def _stand_ins(value: Any, path: tuple[str, ...] = ()) -> set[tuple[tuple[str, ...], str]]:
     if isinstance(value, str):
-        return {(path, value)} if value.startswith(PREFIX) else set()
+        return {(path, str(value))} if isinstance(value, Hidden) else set()
     if isinstance(value, dict):
         return {f for k, v in value.items() for f in _stand_ins(v, (*path, str(k)))}
     if isinstance(value, list | tuple):
