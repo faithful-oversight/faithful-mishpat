@@ -120,7 +120,9 @@ def test_a_stream_that_cannot_be_reconfigured_is_still_written_in_ascii(
             raise ValueError("no")
 
     raw = io.BytesIO()
-    monkeypatch.setattr(sys, "stdout", Stubborn(raw, encoding="ascii", write_through=True))
+    monkeypatch.setattr(
+        sys, "stdout", Stubborn(raw, encoding="ascii", newline="\n", write_through=True)
+    )
     console.prepare()
     console.say("démo")
     assert raw.getvalue() == b"d\\xe9mo\n"

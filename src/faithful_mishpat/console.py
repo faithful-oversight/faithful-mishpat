@@ -70,13 +70,11 @@ def say(text: str = "", *, err: bool = False, end: str = "\n") -> None:
         return
     try:
         _write(stream, text + end)
-    except BrokenPipeError:
+    except (OSError, ValueError):
+        # BrokenPipeError on POSIX; Windows reports a closed pipe as OSError EINVAL. Either
+        # way stdout is replaced, so the flush at interpreter shutdown cannot fail again.
         if not err:
             stdout_closed()
-    except (OSError, ValueError):
-        # A closed or unwritable stream: the work is done and there is nowhere to say so.
-        if not err:
-            _STATE["stdout_closed"] = True
 
 
 def finish() -> None:
@@ -84,8 +82,6 @@ def finish() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.flush()
-        except BrokenPipeError:
+        except (OSError, ValueError):
             if stream is sys.stdout:
                 stdout_closed()
-        except (OSError, ValueError):
-            continue
