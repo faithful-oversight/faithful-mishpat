@@ -762,7 +762,11 @@ def test_collect_never_replaces_the_file_it_was_told_to_use(
 ) -> None:
     """The MER-1 / PAK-1 class: ``-o`` equal to the CA file or the secret file, with --force."""
     called: list[object] = []
-    monkeypatch.setattr(remote, "collect", lambda *a, **k: called.append(a))
+
+    def record(*args: object, **_: object) -> None:
+        called.append(args)
+
+    monkeypatch.setattr(remote, "collect", record)
     file = tmp_path / "input.txt"
     file.write_bytes(b"line one\nline two\n")
     original = file.read_bytes()

@@ -685,8 +685,10 @@ $one = @(Search-Directory 'DC=corp,DC=example' '(objectClass=one)' $props 'Subtr
     assert result.stdout.splitlines() == [
         "(objectClass=none)|0||",
         "(objectClass=one)|1|Hashtable|OU=Only",
-        "(objectClass=organizationalUnit)|3|Hashtable|OU=Servers,DC=corp,DC=example;"
-        "OU=Café,OU=Servers,DC=corp,DC=example;OU=Admins,DC=corp,DC=example",
+        (
+            "(objectClass=organizationalUnit)|3|Hashtable|OU=Servers,DC=corp,DC=example;"
+            "OU=Café,OU=Servers,DC=corp,DC=example;OU=Admins,DC=corp,DC=example"
+        ),
         "x|3|distinguishedname,gplink,gpoptions",
     ]
 
