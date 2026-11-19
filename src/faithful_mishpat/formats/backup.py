@@ -313,6 +313,8 @@ def search_backups(tree: Tree) -> BackupSearch:
                 _deeper(tree, path, found, budget, why=deep)
 
     search("", 1)
+    for selected in list(found.folders):  # a backup below the root can hold another one too
+        _deeper(tree, selected, found, budget, why="inside another backup folder")
     return found
 
 

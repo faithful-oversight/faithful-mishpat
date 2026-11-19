@@ -220,6 +220,47 @@ def test_a_backup_inside_the_backup_at_the_root_is_a_problem() -> None:
     assert "inside another backup folder" in problem.reason
 
 
+def test_a_backup_inside_a_selected_child_backup_is_a_problem() -> None:
+    """MIS-R1: a nested backup beneath a backup found below the root was never looked for."""
+    files = {
+        **backup_files(GUID_A, "Outer", prefix="Outer", report=report(GUID_A, "Outer")),
+        **backup_files(GUID_B, "Inner", prefix="Outer/Sub", report=report(GUID_B, "Inner")),
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert [g.name for g in result.gpos] == ["Outer"]
+    (problem,) = result.problems
+    assert problem.source.detail == "Outer/Sub"
+    assert "inside another backup folder" in problem.reason
+
+
+def test_every_selected_backup_in_a_group_is_searched_for_nested_ones() -> None:
+    files = {
+        **backup_files(GUID_A, "One", prefix="g/one", report=report(GUID_A, "One")),
+        **backup_files(GUID_B, "Two", prefix="g/two", report=report(GUID_B, "Two")),
+        **backup_files(fx.GUID_C, "Deep", prefix="g/two/x/y/z", report=report(fx.GUID_C, "Deep")),
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert sorted(g.name for g in result.gpos) == ["One", "Two"]
+    (problem,) = result.problems
+    assert problem.source.detail == "g/two/x/y/z"
+    assert "inside another backup folder" in problem.reason
+
+
+def test_the_nested_search_shares_one_budget_across_selected_backups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(backup, "MAX_SCAN_FOLDERS", 4)
+    files = {
+        **backup_files(GUID_A, "One", prefix="one", report=report(GUID_A, "One")),
+        **backup_files(GUID_B, "Two", prefix="two", report=report(GUID_B, "Two")),
+        **{f"one/n{n}/file.txt": b"x" for n in range(5)},
+        **{f"two/m{n}/file.txt": b"x" for n in range(5)},
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert sorted(g.name for g in result.gpos) == ["One", "Two"]
+    assert any("stopped after 4 folders" in p.reason for p in result.problems)
+
+
 def test_the_search_below_the_depth_limit_gives_up_openly(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(backup, "MAX_SCAN_FOLDERS", 3)
     files = {f"{'/'.join(['d'] * 4)}/x{n}/y/file.txt": b"x" for n in range(10)}

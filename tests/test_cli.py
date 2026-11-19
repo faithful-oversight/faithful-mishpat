@@ -164,6 +164,33 @@ def test_two_different_inputs_with_no_differences_exit_0(
     assert names(out) == sorted(ALL_FILES)
 
 
+def test_a_backup_nested_in_a_grouped_backup_is_never_a_clean_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """MIS-R1: changing only the inner GPO of ``Outer/`` and ``Outer/Sub/`` must not exit 0."""
+
+    def tree(root: Path, inner: str) -> Path:
+        outer_files = fx.backup_files(fx.GUID_A, "Outer", prefix="Outer", report=fx.report_bytes(gpo()))
+        inner_files = fx.backup_files(
+            fx.GUID_B,
+            "Inner",
+            backup_id=fx.BACKUP_B,
+            prefix="Outer/Sub",
+            report=fx.report_bytes(gpo(fx.GUID_B, "Inner", inner)),
+        )
+        fx.write_tree(root, {**outer_files, **inner_files})
+        return root
+
+    before, after = tree(tmp_path / "before", "Enabled"), tree(tmp_path / "after", "Disabled")
+    out = tmp_path / "out"
+    assert compare(before, after, out) == ExitCode.FINDINGS
+    printed = capsys.readouterr().out
+    assert "Every input was read in full" not in printed
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("inside another backup folder" in p["reason"] for p in document["problems"])
+
+
 def test_inputs_with_the_same_contents_are_a_usage_error(
     pair: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
