@@ -14,7 +14,7 @@ from faithful_mishpat import console
 from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import names, remote, script, secrets
 from faithful_mishpat.errors import UsageError
-from faithful_mishpat.outputs.files import write_files
+from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
 from faithful_mishpat.outputs.safety import command_line, terminal
 
 if TYPE_CHECKING:
@@ -105,6 +105,12 @@ def run_collect(args: argparse.Namespace) -> int:
     if username and not args.secret:
         msg = "--username needs --secret; leave both out to use the current Kerberos ticket"
         raise UsageError(msg)
+    # Before any secret is read: a collection must never replace a file it was told to use.
+    provider, _, location = (args.secret or "").partition(":")
+    uses = [args.ca_file] if args.ca_file else []
+    if provider == "file" and location:
+        uses.append(Path(location))
+    refuse_input_overwrite(uses, args.output.parent, [args.output.name])
     target = remote.Target(
         server=server,
         auth=args.auth,

@@ -77,7 +77,7 @@ def write_files(directory: Path, files: Mapping[str, str], *, force: bool) -> li
 
 
 def refuse_input_overwrite(inputs: Iterable[Path], directory: Path, names: Iterable[str]) -> None:
-    """Refuse a run that would publish a report file over, or into, one of its inputs.
+    """Refuse a run that would publish an output file over, or into, one of its inputs.
 
     An input file and a target are the same file when their resolved paths are equal (this
     covers a symbolic link on either side and an output folder reached through a link,
@@ -89,7 +89,7 @@ def refuse_input_overwrite(inputs: Iterable[Path], directory: Path, names: Itera
     Args:
         inputs: The input files and folders, as given.
         directory: The output folder, which need not exist yet.
-        names: The file names this run will publish, manifest included.
+        names: The file names this run will publish, a manifest included.
 
     Raises:
         MishpatError: A target is, or would be inside, an input.
@@ -113,14 +113,14 @@ def _refuse_if_same(source: Path, target: Path, planned: Path) -> None:
         inside = real_source in (planned, real_target, *planned.parents, *real_target.parents)
         if inside or _hard_link_inside(source, target):
             msg = (
-                f"the report file {target} would be written inside the input folder {source}, "
+                f"the output file {target} would be written inside the input folder {source}, "
                 "which would change the input; choose another output folder"
             )
             raise MishpatError(msg)
         return
     if real_source in (planned, real_target) or _samefile(source, target):
         msg = (
-            f"the input {source} would be overwritten by the report file {target}; "
+            f"the input {source} would be overwritten by the output file {target}; "
             "choose another output folder"
         )
         raise MishpatError(msg)

@@ -756,6 +756,32 @@ def test_collect_checks_everything_before_reading_the_secret(
     assert fetched == []
 
 
+@pytest.mark.parametrize("used", ["ca", "secret"])
+def test_collect_never_replaces_the_file_it_was_told_to_use(
+    used: str, tmp_path: Path, fetched: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The MER-1 / PAK-1 class: ``-o`` equal to the CA file or the secret file, with --force."""
+    called: list[object] = []
+    monkeypatch.setattr(remote, "collect", lambda *a, **k: called.append(a))
+    file = tmp_path / "input.txt"
+    file.write_bytes(b"line one\nline two\n")
+    original = file.read_bytes()
+    outputs = [file]
+    if sys.platform != "win32":  # creating a link needs a privilege on Windows
+        (tmp_path / "alias.txt").symlink_to(file)
+        outputs.append(tmp_path / "alias.txt")
+    use = (
+        ["--ca-file", str(file)]
+        if used == "ca"
+        else ["--username", "auditor@corp.example", "--secret", f"file:{file}"]
+    )
+    for out in outputs:
+        with pytest.raises(MishpatError, match="would be overwritten"):
+            invoke(*collect_args(out, "--all", "--force", *use))
+    assert file.read_bytes() == original
+    assert (called, fetched) == ([], [])  # nothing was read, nothing was collected
+
+
 def test_collect_runs_and_says_what_to_do_next(
     tmp_path: Path,
     fetched: list[str],

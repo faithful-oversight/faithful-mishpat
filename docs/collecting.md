@@ -184,7 +184,7 @@ The lines stream into a private temporary file in the same folder as the output,
 When the script ends, mishpat checks the end line against what arrived. The end line must pass the file reader's own checks, and the file count and the SHA-256 of every line before it must match. The export must hold one structure line. Only then does mishpat publish the file, so a stream that `mishpat compare` would refuse at its first line or end line is never published, and an existing file is left as it was.
 
 - Without `--force`, mishpat puts the file in place only if the name is free, so it never replaces a file, even one that appears while collection runs. mishpat also checks at the start and refuses early if the file exists.
-- With `--force`, it replaces the file.
+- With `--force`, it replaces the file. Even then, mishpat refuses (before it reads a secret or connects) when the output file is the `--ca-file` or the file named by `--secret file:PATH`, by the same path, a symbolic link, or a hard link.
 - On any failure, mishpat deletes the temporary file. A partial file is never left behind.
 - On Linux and macOS, the temporary file is readable only by your user account.
 

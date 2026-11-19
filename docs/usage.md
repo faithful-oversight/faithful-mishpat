@@ -129,7 +129,7 @@ Runs the packaged exporter on a domain controller over PowerShell remoting and w
 | `--ca-file` | A PEM file of certificate authorities to verify the HTTPS certificate against. Applies to `https` only. |
 | `--timeout` | Stop when the exporter sends nothing for this many seconds, from 1 to 86400. Default: 600. |
 | `-o`, `--output` | The bundle file to write. Required. |
-| `--force` | Replace an existing file. |
+| `--force` | Replace an existing file, except `--ca-file` or the `--secret file:PATH` file, which mishpat always refuses to replace (exit 3). |
 
 Give exactly one of `--all`, `--name`, and `--guid`.
 
