@@ -934,3 +934,45 @@ def test_the_xml_element_limit_is_refused_and_can_be_raised(
     assert not (tmp_path / "o").exists()
     assert compare(*pair, tmp_path / "o2", "--max-xml-elements", "100000") == ExitCode.FINDINGS
     assert xmlsafe.MAX_ELEMENTS == 1_000_000
+
+
+# --- a value with a line break cannot add a terminal line ------------------------------------
+
+FORGED = "No differences found."
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not allow line breaks in names")
+def test_names_and_messages_with_line_breaks_stay_on_one_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A path, a file name, or an error message is one line, however it is written."""
+    folder = tmp_path / f"d\n{FORGED}"
+    assert main(["example", str(folder)]) == ExitCode.OK
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[0].startswith("Wrote a synthetic before and after to ")
+    assert lines[1].startswith("  mishpat compare ")
+    assert len(lines) == 2
+
+    before, after = (folder / name for name in example.NAMES)
+    out = folder / f"r\r\n{FORGED}"
+    assert compare(before, after, out) == ExitCode.FINDINGS
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[-1].startswith("Reports written to ")
+    assert "\\n" in lines[-1]
+
+    missing = tmp_path / f"m\n{FORGED}.xml"
+    assert compare(missing, after, tmp_path / "x") == ExitCode.INPUT_ERROR
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1
+    assert "\\n" in err
+
+    monkeypatch.setattr(pipeline, "run", broken(f"first\n{FORGED}\r\nthird"))
+    assert compare(before, after, tmp_path / "y") == ExitCode.INTERNAL_ERROR
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[0] == f"mishpat: internal error: RuntimeError: first\\n{FORGED}\\r\\nthird"
+    assert lines[1].startswith("This is a bug in mishpat")
+    assert len(lines) == 2

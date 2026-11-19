@@ -22,7 +22,7 @@ from faithful_mishpat.errors import MishpatError, UsageError
 from faithful_mishpat.formats import backup, registrypol, xmlsafe
 from faithful_mishpat.outputs import render
 from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
-from faithful_mishpat.outputs.safety import command_line, terminal
+from faithful_mishpat.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -180,7 +180,8 @@ def _compare(args: argparse.Namespace) -> int:
         not comparison.complete or (args.fail_on == "differences" and comparison.differences)
     )
     console.say(render.terminal_summary(document))
-    console.say(terminal(f"Reports written to {args.output}: {', '.join(p.name for p in written)}"))
+    names = ", ".join(terminal_line(p.name) for p in written)
+    console.say(f"Reports written to {terminal_line(str(args.output))}: {names}")
     return int(ExitCode.FINDINGS if failed else ExitCode.OK)
 
 
@@ -198,7 +199,8 @@ def _example(args: argparse.Namespace) -> int:
         "mishpat", "compare", str(before), str(after), "-o", str(args.directory / "report")
     )
     console.say(
-        terminal(f"Wrote a synthetic before and after to {args.directory}. Try:\n  {command}")
+        f"Wrote a synthetic before and after to {terminal_line(str(args.directory))}. Try:\n"
+        f"  {terminal_line(command)}"
     )
     return int(ExitCode.OK)
 
@@ -224,11 +226,12 @@ def _run(argv: Sequence[str] | None) -> int:
     try:
         return int(args.run(args))
     except MishpatError as exc:
-        console.say(f"mishpat: error: {terminal(redact(str(exc)))}", err=True)
+        console.say(f"mishpat: error: {terminal_line(redact(str(exc)))}", err=True)
         return int(ExitCode.USAGE if isinstance(exc, UsageError) else ExitCode.INPUT_ERROR)
     except Exception as exc:  # noqa: BLE001 - last-resort handler keeps crashes distinct
+        shown = terminal_line(redact(str(exc)))[:200]
         console.say(
-            f"mishpat: internal error: {type(exc).__name__}: {terminal(redact(str(exc)))[:200]}\n"
+            f"mishpat: internal error: {type(exc).__name__}: {shown}\n"
             "This is a bug in mishpat. Please report it.",
             err=True,
         )

@@ -39,6 +39,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - On Windows, a closed pipe (reported there as an invalid-argument error rather than a broken pipe) also stops the printing and keeps the real exit code, instead of ending with an internal error or exit 120.
 - `mishpat compare --force` can no longer replace an input with a generated report. A report or manifest file that is one of the inputs (the same path, a symbolic link, or a hard link), or that would be written inside an input folder, now stops the run with exit 3 before anything is read or written, and the input stays unchanged. `mishpat collect --force` likewise refuses an output file that is its `--ca-file` or its `--secret file:` file.
 - The exporter no longer hands its directory search results back as one array inside an array. Every scope of management, link and WMI filter was then recorded as a gap (a conversion error), so a full export of a real domain carried no structure. The search now returns one row per object, and the tests run the script's own search code against a stand-in for Active Directory.
+- A file name, report folder, export path, or error message that contains a line break can no longer add a line to what mishpat prints. Previously a value such as `d\nNo differences found.` put a convincing line of its own under mishpat's output. These values now print on one line, with the line break shown as `\n`.
 
 ### Changed
 
