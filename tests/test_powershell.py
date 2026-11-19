@@ -85,6 +85,11 @@ def test_the_script_only_reads() -> None:
     assert "[adsi]" in TEXT
 
 
+def test_no_function_sends_a_whole_array_as_one_object() -> None:
+    """A leading comma before ``ToArray()`` hides every row inside one ``Object[]`` (MIS-R2)."""
+    assert not re.search(r"^\s*,\s*\$\w+\.ToArray\(\)", code(), re.MULTILINE)
+
+
 def test_the_output_file_is_never_overwritten_without_force() -> None:
     assert "[System.IO.FileMode]::CreateNew" in TEXT
     assert "[System.IO.FileMode]::Create " not in TEXT  # the file is never opened in place
@@ -237,6 +242,21 @@ Get-LdapPath 'DC=corp,DC=example'
     ]
 
 
+@needs_pwsh
+def test_sort_ordinal_gives_callers_items_not_a_wrapped_array(place: Place) -> None:
+    """The sibling of MIS-R2: ``@(Sort-Ordinal ...)`` must count items for none, one, many."""
+    body = r"""
+$none = @(Sort-Ordinal @() 'k')
+$one = @(Sort-Ordinal @(@{ k = 'a' }) 'k')
+$many = @(Sort-Ordinal @(@{ k = 'b' }, @{ k = 'a' }) 'k')
+$objects = @(Sort-Ordinal @([pscustomobject] @{ k = 'z' }) 'k')
+"$($none.Count) $($one.Count) $($one[0].GetType().Name) $($many.Count) $($many[0].k) $($objects.Count) $($objects[0].k)"
+"""
+    result = run_pwsh(place, body)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["0", "1", "Hashtable", "2", "a", "1", "z"]
+
+
 # --- a stand-in for Active Directory and the GroupPolicy module -------------------------
 
 GUID_A = "11111111-1111-4111-8111-111111111111"
@@ -288,27 +308,53 @@ function Backup-GPO {
     }
     if ($env:MISHPAT_TWO_FOLDERS) { [void] [System.IO.Directory]::CreateDirectory([System.IO.Path]::Combine($Path, '{second}')) }
 }
-function Search-Directory([string] $BaseDn, [string] $Filter, [string[]] $Properties, [string] $Scope) {
-    if ($Filter -eq '(objectClass=domain)') {
-        return @(@{ distinguishedname = 'DC=corp,DC=example'; gplink = '[LDAP://cn={11111111-1111-4111-8111-111111111111},cn=policies,cn=system,DC=corp,DC=example;2]'; gpoptions = 0 })
+# Active Directory itself is replaced one level lower than the script's own search: only
+# the directory object and the searcher are stand-ins, so Search-Directory, with its row
+# building and what it returns to its callers, is the script's own code.
+$FakeRows = @{
+    '(objectClass=domain)' = @(
+        @{ distinguishedname = 'DC=corp,DC=example'; gplink = '[LDAP://cn={11111111-1111-4111-8111-111111111111},cn=policies,cn=system,DC=corp,DC=example;2]'; gpoptions = 0 }
+    )
+    '(objectClass=organizationalUnit)' = @(
+        @{ distinguishedname = 'OU=Servers,DC=corp,DC=example'; gplink = $null; gpoptions = 1 }
+        @{ distinguishedname = 'OU=Caf' + [char] 0xE9 + ',OU=Servers,DC=corp,DC=example'; gplink = ''; gpoptions = $null }
+        @{ distinguishedname = 'OU=Admins,DC=corp,DC=example'; gplink = '[LDAP://cn={bbbbbbbb-2222-4222-8222-222222222222},cn=policies,cn=system,DC=corp,DC=example;0]'; gpoptions = '0' }
+    )
+    '(objectClass=site)' = @(
+        @{ distinguishedname = 'CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=corp,DC=example'; gplink = '[LDAP://cn={33333333-3333-4333-8333-333333333333},cn=policies,cn=system,DC=corp,DC=example;1]'; gpoptions = 1 }
+    )
+    '(objectClass=msWMI-Som)' = @(
+        @{ 'mswmi-id' = '{ABCDEF01-0000-4000-8000-00000000000F}'; 'mswmi-name' = 'Win10'; 'mswmi-parm1' = $null; 'mswmi-parm2' = '1;3;10;5;WQL;root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%";' }
+        @{ 'mswmi-id' = '{0A0A0A0A-0000-4000-8000-000000000001}'; 'mswmi-name' = 'Laptops'; 'mswmi-parm1' = 'Only laptops'; 'mswmi-parm2' = 'q' }
+    )
+}
+function New-DirectoryEntry([string] $DistinguishedName) {
+    $entry = [pscustomobject] @{ DistinguishedName = $DistinguishedName }
+    Add-Member -InputObject $entry -MemberType ScriptMethod -Name Dispose -Value { }
+    $entry
+}
+function New-DirectorySearcher([string] $Filter) {
+    $searcher = [pscustomobject] @{
+        Filter = $Filter; SearchRoot = $null; PageSize = 0; SearchScope = $null
+        PropertiesToLoad = (New-Object System.Collections.ArrayList)
     }
-    if ($Filter -eq '(objectClass=organizationalUnit)') {
-        return @(
-            @{ distinguishedname = 'OU=Servers,DC=corp,DC=example'; gplink = $null; gpoptions = 1 }
-            @{ distinguishedname = 'OU=Caf' + [char] 0xE9 + ',OU=Servers,DC=corp,DC=example'; gplink = ''; gpoptions = $null }
-            @{ distinguishedname = 'OU=Admins,DC=corp,DC=example'; gplink = '[LDAP://cn={bbbbbbbb-2222-4222-8222-222222222222},cn=policies,cn=system,DC=corp,DC=example;0]'; gpoptions = '0' }
-        )
+    Add-Member -InputObject $searcher -MemberType ScriptMethod -Name Dispose -Value { }
+    Add-Member -InputObject $searcher -MemberType ScriptMethod -Name FindAll -Value {
+        # FINDALL-HOOK
+        if (-not $FakeRows.ContainsKey($this.Filter)) { throw "unexpected search $($this.Filter)" }
+        $found = New-Object System.Collections.ArrayList
+        foreach ($row in $FakeRows[$this.Filter]) {
+            $properties = @{}
+            foreach ($name in $this.PropertiesToLoad) {
+                $key = ([string] $name).ToLowerInvariant()
+                $properties[$key] = if ($null -ne $row[$key]) { , @($row[$key]) } else { , @() }
+            }
+            [void] $found.Add([pscustomobject] @{ Properties = $properties })
+        }
+        Add-Member -InputObject $found -MemberType ScriptMethod -Name Dispose -Value { }
+        , $found
     }
-    if ($Filter -eq '(objectClass=site)') {
-        return @(@{ distinguishedname = 'CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=corp,DC=example'; gplink = '[LDAP://cn={33333333-3333-4333-8333-333333333333},cn=policies,cn=system,DC=corp,DC=example;1]'; gpoptions = 1 })
-    }
-    if ($Filter -eq '(objectClass=msWMI-Som)') {
-        return @(
-            @{ 'mswmi-id' = '{ABCDEF01-0000-4000-8000-00000000000F}'; 'mswmi-name' = 'Win10'; 'mswmi-parm1' = $null; 'mswmi-parm2' = '1;3;10;5;WQL;root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%";' }
-            @{ 'mswmi-id' = '{0A0A0A0A-0000-4000-8000-000000000001}'; 'mswmi-name' = 'Laptops'; 'mswmi-parm1' = 'Only laptops'; 'mswmi-parm2' = 'q' }
-        )
-    }
-    throw "unexpected search $Filter"
+    $searcher
 }
 """
 
@@ -579,9 +625,8 @@ REASON = 'Access is denied. "quoted" \u00e9'
 
 def failing(filter_text: str, message: str) -> str:
     return STUB.replace(
-        "function Search-Directory([string] $BaseDn, [string] $Filter, [string[]] $Properties, [string] $Scope) {",
-        "function Search-Directory([string] $BaseDn, [string] $Filter, [string[]] $Properties, [string] $Scope) {\n"
-        f"    if ($Filter -eq '{filter_text}') {{ throw '{message}' }}",
+        "# FINDALL-HOOK",
+        f"if ($this.Filter -eq '{filter_text}') {{ throw '{message}' }}",
     )
 
 
@@ -605,7 +650,11 @@ def test_a_part_that_cannot_be_read_becomes_a_gap(
     result = export(place, "$All = $true", stub=failing(filter_text, REASON))
     assert result.returncode == 0, result.stderr
     bundle = read_out(place)
-    assert bundle.structure["gaps"] == [{"what": what, "reason": REASON}]
+    (gap,) = bundle.structure["gaps"]
+    assert gap["what"] == what
+    # PowerShell wraps an exception raised inside a method call; the cause stays in the text.
+    assert gap["reason"].endswith(f'"{REASON}"')
+    assert REASON in gap["reason"]
     assert list(bundle.structure)[:2] == ["scopes", "wmi_filters"]
     if key is None:
         assert bundle.structure["wmi_filters"] == []
@@ -614,6 +663,72 @@ def test_a_part_that_cannot_be_read_becomes_a_gap(
         assert {s["kind"] for s in bundle.structure["scopes"]} == {"domain", "ou", "site"} - {key}
         assert bundle.structure["wmi_filters"] == EXPECTED_STRUCTURE["wmi_filters"]
     check_files(bundle, ALL_GUIDS)  # the GPOs are still all there
+
+
+@needs_pwsh
+def test_search_directory_hands_its_callers_one_hashtable_per_object(place: Place) -> None:
+    """MIS-R2: the rows must reach ``@(...)`` as rows, for none, one and several objects."""
+    body = r"""
+$props = @('distinguishedName', 'gPLink', 'gPOptions')
+$FakeRows['(objectClass=none)'] = @()
+$FakeRows['(objectClass=one)'] = @(@{ distinguishedname = 'OU=Only'; gplink = 'x'; gpoptions = 3 })
+foreach ($filter in '(objectClass=none)', '(objectClass=one)', '(objectClass=organizationalUnit)') {
+    $rows = @(Search-Directory 'DC=corp,DC=example' $filter $props 'Subtree')
+    $kinds = (@($rows | ForEach-Object { $_.GetType().Name }) | Sort-Object -Unique) -join ','
+    "$filter|$($rows.Count)|$kinds|" + ((@($rows | ForEach-Object { $_['distinguishedname'] })) -join ';')
+}
+$one = @(Search-Directory 'DC=corp,DC=example' '(objectClass=one)' $props 'Subtree')[0]
+"$($one['gplink'])|$($one['gpoptions'])|" + (($one.Keys | Sort-Object) -join ',')
+"""
+    result = run_pwsh(place, STUB + body)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "(objectClass=none)|0||",
+        "(objectClass=one)|1|Hashtable|OU=Only",
+        "(objectClass=organizationalUnit)|3|Hashtable|OU=Servers,DC=corp,DC=example;"
+        "OU=Café,OU=Servers,DC=corp,DC=example;OU=Admins,DC=corp,DC=example",
+        "x|3|distinguishedname,gplink,gpoptions",
+    ]
+
+
+@needs_pwsh
+def test_the_structure_is_complete_for_every_kind_of_scope_and_has_no_gap(place: Place) -> None:
+    body = r"""
+$line = Get-StructureLine (Get-DomainFacts)
+$line
+"""
+    result = run_pwsh(place, STUB + body)
+    assert result.returncode == 0, result.stderr
+    structure = json.loads(result.stdout)["structure"]
+    assert "gaps" not in structure
+    assert structure == EXPECTED_STRUCTURE
+
+
+@needs_pwsh
+def test_a_search_base_that_does_not_exist_is_empty_and_not_a_gap(place: Place) -> None:
+    # A real method's COMException is what the script catches, so the stand-in must be
+    # compiled code: an exception thrown from a PowerShell script method arrives wrapped.
+    missing = r"""
+Add-Type -TypeDefinition @'
+public class MissingBaseSearcher {
+    public object SearchRoot; public int PageSize; public object SearchScope;
+    public System.Collections.ArrayList PropertiesToLoad = new System.Collections.ArrayList();
+    public System.Collections.ArrayList FindAll() {
+        throw new System.Runtime.InteropServices.COMException("No such object", -2147016656);
+    }
+    public void Dispose() { }
+}
+'@
+$realSearcher = ${function:New-DirectorySearcher}
+function New-DirectorySearcher([string] $Filter) {
+    if ($Filter -eq '(objectClass=site)') { New-Object MissingBaseSearcher } else { & $realSearcher $Filter }
+}
+"""
+    result = export(place, "$All = $true", stub=STUB + missing)
+    assert result.returncode == 0, result.stderr
+    structure = read_out(place).structure
+    assert "gaps" not in structure
+    assert {s["kind"] for s in structure["scopes"]} == {"domain", "ou"}
 
 
 # --- the temporary folder and the output file ------------------------------------------
