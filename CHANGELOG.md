@@ -37,6 +37,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `SECURITY.md` no longer says that no release has been published. It says the latest release is supported.
 - The PowerShell syntax check now fails in CI when PowerShell is missing, instead of skipping.
 - On Windows, a closed pipe (reported there as an invalid-argument error rather than a broken pipe) also stops the printing and keeps the real exit code, instead of ending with an internal error or exit 120.
+- `mishpat compare --force` can no longer replace an input with a generated report. A report or manifest file that is one of the inputs (the same path, a symbolic link, or a hard link), or that would be written inside an input folder, now stops the run with exit 3 before anything is read or written, and the input stays unchanged.
 - The exporter no longer hands its directory search results back as one array inside an array. Every scope of management, link and WMI filter was then recorded as a gap (a conversion error), so a full export of a real domain carried no structure. The search now returns one row per object, and the tests run the script's own search code against a stand-in for Active Directory.
 
 ### Changed

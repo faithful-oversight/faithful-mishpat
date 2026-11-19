@@ -30,7 +30,7 @@ mishpat compare BEFORE AFTER -o DIR [options]
 | `--max-pol-entries` | Most entries read from one `Registry.pol` file. Default: 1,000,000. A file with more is a problem: the entries after the limit are not read, the report says so, the comparison is incomplete, and the exit code is `1`. Raise it for an unusually large file. |
 | `--max-scan-folders` | Most folders listed below the backup search depth, only to look for a backup that would not be read. Default: 200,000. Reaching it is a problem, so the comparison is incomplete and the exit code is `1`. |
 | `--max-xml-elements` | Most XML elements held in memory at once while reading one XML file. Default: 1,000,000. A `<GPOS>` file is read one GPO at a time, so this bounds one GPO, not the whole file. A file over the limit is refused (exit code `3`); a small file inside a backup that is over it is a problem (exit code `1`). Raise it only for a single very large GPO. |
-| `--force` | Replace report files that already exist. Without it, mishpat refuses. |
+| `--force` | Replace report files that already exist. Without it, mishpat refuses. Even with it, mishpat refuses (exit 3, before reading anything) when a report or manifest file is one of the inputs, or would be written inside an input folder. That covers the same path, a symbolic link in either direction, and a hard link. |
 
 The two sides can be different kinds. You can compare a `Backup-GPO` folder with an export bundle, for example. mishpat compares only what both sides record, and it lists the rest under [Not compared](output.md#not-compared).
 
@@ -168,7 +168,7 @@ Writes a synthetic before and after into the folder, creating it if needed, and 
 | `0` | Success. For `mishpat compare`, the result did not reach the `--fail-on` level, which for the default means there are no differences and every input was read in full. Also `--help`, `--version`, `schema`, `example`, `exporter`, and `collect` when they succeed. |
 | `1` | `mishpat compare` wrote its reports, and the result reached the level that `--fail-on` names: by default, there is a difference or an input was not read in full. |
 | `2` | The command was used incorrectly. For example, an option is unknown or missing, a value is out of range, two inputs have the same contents, `--match name` meets a name that is not unique, or options that must go together do not. Also `mishpat` run with no command. |
-| `3` | An input, output, or collection problem: a missing or unreadable input, an input of no known kind, a bundle with no valid header, a root with two backups of one GPO, a report file that already exists, or a failed collection. This includes a bad `--server` or `--username` for `mishpat collect`. |
+| `3` | An input, output, or collection problem: a missing or unreadable input, an input of no known kind, a bundle with no valid header, a root with two backups of one GPO, a report file that already exists, a report file that is, or would be inside, one of the inputs, or a failed collection. This includes a bad `--server` or `--username` for `mishpat collect`. |
 | `4` | An internal error in mishpat. This is a bug. Please report it. |
 
 Exit code `1` never means the tool failed. It means the result needs a look, so read the report.

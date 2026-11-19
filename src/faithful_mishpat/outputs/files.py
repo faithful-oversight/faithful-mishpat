@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING
 from faithful_mishpat.errors import MishpatError
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
 
 def write_files(directory: Path, files: Mapping[str, str], *, force: bool) -> list[Path]:
@@ -74,6 +74,78 @@ def write_files(directory: Path, files: Mapping[str, str], *, force: bool) -> li
         for temp in staged:
             temp.unlink(missing_ok=True)
     return targets
+
+
+def refuse_input_overwrite(inputs: Iterable[Path], directory: Path, names: Iterable[str]) -> None:
+    """Refuse a run that would publish a report file over, or into, one of its inputs.
+
+    An input file and a target are the same file when their resolved paths are equal (this
+    covers a symbolic link on either side and an output folder reached through a link,
+    even before the target exists) or when ``os.path.samefile`` says they share a device
+    and inode (this covers hard links). A target that would sit inside an input folder is
+    refused too, because it would change what the folder holds after its fingerprint was
+    taken. The check does not depend on ``force``: an input is never a place to publish.
+
+    Args:
+        inputs: The input files and folders, as given.
+        directory: The output folder, which need not exist yet.
+        names: The file names this run will publish, manifest included.
+
+    Raises:
+        MishpatError: A target is, or would be inside, an input.
+    """
+    try:
+        planned_directory = Path(os.path.realpath(directory))
+        for name in names:
+            target = directory / name
+            planned = planned_directory / name
+            for source in inputs:
+                _refuse_if_same(source, target, planned)
+    except OSError as exc:
+        msg = f"cannot compare the inputs with the output folder {directory}: {exc.strerror}"
+        raise MishpatError(msg) from exc
+
+
+def _refuse_if_same(source: Path, target: Path, planned: Path) -> None:
+    real_source = Path(os.path.realpath(source))
+    real_target = Path(os.path.realpath(target))
+    if source.is_dir():
+        inside = real_source in (planned, real_target, *planned.parents, *real_target.parents)
+        if inside or _hard_link_inside(source, target):
+            msg = (
+                f"the report file {target} would be written inside the input folder {source}, "
+                "which would change the input; choose another output folder"
+            )
+            raise MishpatError(msg)
+        return
+    if real_source in (planned, real_target) or _samefile(source, target):
+        msg = (
+            f"the input {source} would be overwritten by the report file {target}; "
+            "choose another output folder"
+        )
+        raise MishpatError(msg)
+
+
+def _samefile(source: Path, target: Path) -> bool:
+    try:
+        return source.samefile(target)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+
+
+def _hard_link_inside(folder: Path, target: Path) -> bool:
+    """Whether an existing target is a second name for a file inside ``folder``."""
+    try:
+        found = target.stat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    if found.st_nlink < 2:  # noqa: PLR2004 - a file with one name has no other name to find
+        return False
+    return any(
+        (member.stat().st_dev, member.stat().st_ino) == (found.st_dev, found.st_ino)
+        for member in folder.rglob("*")
+        if member.is_file()
+    )
 
 
 def _check_targets(targets: list[Path], *, force: bool) -> None:

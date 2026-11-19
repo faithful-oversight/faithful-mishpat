@@ -339,6 +339,135 @@ def test_an_unknown_fail_on_is_a_usage_error(
     assert "invalid choice" in capsys.readouterr().err
 
 
+# --- compare: a report is never published over an input -----------------------------------
+
+needs_links = pytest.mark.skipif(
+    sys.platform == "win32", reason="creating a link needs a privilege on Windows"
+)
+REPORT_NAMES = [*FILE_NAMES.values(), MANIFEST_NAME]
+
+
+def refused(before: Path, after: Path, out: Path, capsys: pytest.CaptureFixture[str]) -> str:
+    """Run ``compare --force`` and return the error: the run must stop with exit 3."""
+    capsys.readouterr()
+    assert compare(before, after, out, "--force") == ExitCode.INPUT_ERROR
+    captured = capsys.readouterr()
+    assert "would be overwritten" in captured.err or "inside the input folder" in captured.err
+    return captured.err
+
+
+@pytest.mark.parametrize("name", REPORT_NAMES)
+def test_force_never_replaces_an_input_file_with_a_report(
+    name: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The MER-1 / PAK-1 class: an input named like a report file, in the output folder."""
+    one = write(tmp_path / name, gpo())
+    other = write(tmp_path / "other.xml", gpo(state="Disabled"))
+    original = one.read_bytes()
+    error = refused(one, other, tmp_path, capsys)
+    assert str(one) in error
+    assert one.read_bytes() == original
+    assert names(tmp_path) == sorted([name, "other.xml"])  # nothing else was written either
+    capsys.readouterr()
+    assert compare(other, one, tmp_path, "--force") == ExitCode.INPUT_ERROR  # either side
+    assert one.read_bytes() == original
+
+
+def test_force_never_replaces_an_export_bundle_input(tmp_path: Path) -> None:
+    bundle = tmp_path / FILE_NAMES["json"]
+    bundle.write_bytes(
+        fx.bundle_bytes(fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo())))
+    )
+    other = write(tmp_path / "other.xml", gpo(state="Disabled"))
+    original = bundle.read_bytes()
+    assert compare(bundle, other, tmp_path, "--force") == ExitCode.INPUT_ERROR
+    assert bundle.read_bytes() == original
+
+
+@needs_links
+def test_a_symbolic_link_to_an_input_is_refused_in_every_position(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    one = write(inputs / "before.xml", gpo())
+    other = write(inputs / "after.xml", gpo(state="Disabled"))
+    original = one.read_bytes()
+    # A report name that is a link to the input.
+    out = tmp_path / "linked-name"
+    out.mkdir()
+    (out / FILE_NAMES["md"]).symlink_to(one)
+    refused(one, other, out, capsys)
+    # An output folder that is a link to the input folder.
+    alias = tmp_path / "alias"
+    alias.symlink_to(inputs, target_is_directory=True)
+    named = write(inputs / FILE_NAMES["json"], gpo())
+    kept = named.read_bytes()
+    refused(named, other, alias, capsys)
+    assert named.read_bytes() == kept
+    assert one.read_bytes() == original
+
+
+@needs_links
+def test_a_hard_link_to_an_input_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    one = write(tmp_path / "before.xml", gpo())
+    other = write(tmp_path / "after.xml", gpo(state="Disabled"))
+    out = tmp_path / "out"
+    out.mkdir()
+    os.link(one, out / MANIFEST_NAME)
+    original = one.read_bytes()
+    refused(one, other, out, capsys)
+    assert one.read_bytes() == original
+    assert (out / MANIFEST_NAME).read_bytes() == original
+
+
+def test_force_never_publishes_inside_an_input_folder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = tmp_path / "bk"
+    fx.write_tree(folder, fx.backup_files(report=fx.report_bytes(gpo())))
+    (folder / FILE_NAMES["json"]).write_bytes(b"part of the folder")
+    other = write(tmp_path / "after.xml", gpo(state="Disabled"))
+    before = {p: p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+    for out in (folder, folder / "reports"):
+        assert "inside the input folder" in refused(folder, other, out, capsys)
+    assert {p: p.read_bytes() for p in folder.rglob("*") if p.is_file()} == before
+    assert not (folder / "reports").exists()
+
+
+@needs_links
+def test_a_link_from_the_output_folder_into_an_input_folder_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = tmp_path / "bk"
+    fx.write_tree(folder, fx.backup_files(report=fx.report_bytes(gpo())))
+    member = next(p for p in sorted(folder.rglob("*.xml")) if p.is_file())
+    other = write(tmp_path / "after.xml", gpo(state="Disabled"))
+    original = member.read_bytes()
+    for kind, name in (("hard", FILE_NAMES["md"]), ("symbolic", FILE_NAMES["html"])):
+        out = tmp_path / f"{kind}-out"
+        out.mkdir()
+        if kind == "hard":
+            os.link(member, out / name)
+        else:
+            (out / name).symlink_to(member)
+        refused(folder, other, out, capsys)
+    assert member.read_bytes() == original
+
+
+def test_a_report_folder_that_merely_neighbours_the_inputs_still_works(tmp_path: Path) -> None:
+    before, after = (
+        write(tmp_path / "before.xml", gpo()),
+        write(tmp_path / "after.xml", gpo(state="Disabled")),
+    )
+    out = tmp_path / "reports"
+    for _ in range(2):  # the second run replaces the first run's reports, as --force always did
+        assert compare(before, after, out, "--force") == ExitCode.FINDINGS
+    assert names(out) == sorted(REPORT_NAMES)
+
+
 # --- compare: --match -------------------------------------------------------------------
 
 

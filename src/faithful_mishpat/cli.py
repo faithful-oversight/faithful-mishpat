@@ -21,7 +21,7 @@ from faithful_mishpat.compare import MATCHES
 from faithful_mishpat.errors import MishpatError, UsageError
 from faithful_mishpat.formats import backup, registrypol, xmlsafe
 from faithful_mishpat.outputs import render
-from faithful_mishpat.outputs.files import write_files
+from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
 from faithful_mishpat.outputs.safety import command_line, terminal
 
 if TYPE_CHECKING:
@@ -149,6 +149,13 @@ _count = bounded(1, 1_000_000_000, "a whole number")
 
 
 def _compare(args: argparse.Namespace) -> int:
+    # Before anything is read or written: a report must never replace or enter an input.
+    refuse_input_overwrite(
+        [args.before, args.after],
+        args.output,
+        [outputs.FILE_NAMES[f] for f in args.format if f in outputs.FILE_NAMES]
+        + [outputs.MANIFEST_NAME],
+    )
     saved = registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS, xmlsafe.MAX_ELEMENTS
     registrypol.MAX_ENTRIES = args.max_pol_entries
     backup.MAX_SCAN_FOLDERS = args.max_scan_folders
