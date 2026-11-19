@@ -170,7 +170,9 @@ def test_a_backup_nested_in_a_grouped_backup_is_never_a_clean_result(
     """MIS-R1: changing only the inner GPO of ``Outer/`` and ``Outer/Sub/`` must not exit 0."""
 
     def tree(root: Path, inner: str) -> Path:
-        outer_files = fx.backup_files(fx.GUID_A, "Outer", prefix="Outer", report=fx.report_bytes(gpo()))
+        outer_files = fx.backup_files(
+            fx.GUID_A, "Outer", prefix="Outer", report=fx.report_bytes(gpo())
+        )
         inner_files = fx.backup_files(
             fx.GUID_B,
             "Inner",
