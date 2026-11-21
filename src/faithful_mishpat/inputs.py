@@ -18,8 +18,10 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from faithful_core import xmlsafe
+
 from faithful_mishpat.errors import InputError
-from faithful_mishpat.formats import backup, bundle, report, xmlsafe
+from faithful_mishpat.formats import backup, bundle, report
 from faithful_mishpat.model import Snapshot, Source
 
 if TYPE_CHECKING:

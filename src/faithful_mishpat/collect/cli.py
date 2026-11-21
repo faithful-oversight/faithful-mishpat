@@ -10,12 +10,13 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from faithful_mishpat import console
+from faithful_core.console import say
+from faithful_core.safety import command_line, terminal_line
+
 from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import names, remote, script, secrets
 from faithful_mishpat.errors import UsageError
 from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
-from faithful_mishpat.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     from typing import Any
@@ -126,14 +127,14 @@ def run_collect(args: argparse.Namespace) -> int:
         target = remote.Target(**{**vars(target), "secret": secrets.resolve(args.secret)})
     values = remote.parameters(names=args.name, guids=args.guid, every_gpo=args.all, server=server)
     result = remote.collect(target, script.text(), values, args.output, force=args.force)
-    console.say(
+    say(
         f"Exported {result.files} files from {terminal_line(server)} "
         f"into {terminal_line(str(result.path))}."
     )
     for gap in result.gaps:
-        console.say(f"  not read: {terminal_line(gap)}")
+        say(f"  not read: {terminal_line(gap)}")
     command = command_line("mishpat", "compare", str(result.path), "AFTER", "-o", "report")
-    console.say(f"Compare it with a later export using: {terminal_line(command)}")
+    say(f"Compare it with a later export using: {terminal_line(command)}")
     return 0
 
 
@@ -142,6 +143,6 @@ def run_exporter(args: argparse.Namespace) -> int:
     path: Path = args.output
     written = write_files(path.parent, {path.name: script.text()}, force=args.force)
     command = f".\\{script.NAME} -All -OutFile corp-gpos.jsonl"
-    console.say(f"Wrote {terminal_line(str(written[0]))}. On a domain controller, in PowerShell:")
-    console.say(f"  {command}")
+    say(f"Wrote {terminal_line(str(written[0]))}. On a domain controller, in PowerShell:")
+    say(f"  {command}")
     return 0

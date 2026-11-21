@@ -11,11 +11,12 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from faithful_core.exitcodes import ExitCode
 from jsonschema import FormatChecker
 from jsonschema.validators import validator_for
 
 from faithful_mishpat import example
-from faithful_mishpat.cli import ExitCode, main
+from faithful_mishpat.cli import main
 from faithful_mishpat.differences import CATEGORIES
 from faithful_mishpat.formats import bundle
 from faithful_mishpat.outputs import FILE_NAMES, MANIFEST_NAME

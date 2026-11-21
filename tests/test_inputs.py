@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from faithful_core import xmlsafe
 
 from faithful_mishpat import inputs
 from faithful_mishpat.errors import InputError
-from faithful_mishpat.formats import xmlsafe
 from faithful_mishpat.inputs import display_name, read_side
 from faithful_mishpat.model import Source
 from tests import fixtures_gpo as fx

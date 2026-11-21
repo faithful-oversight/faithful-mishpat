@@ -12,9 +12,9 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
+from faithful_core.exitcodes import ExitCode
 
-from faithful_mishpat import console
-from faithful_mishpat.cli import ExitCode, main
+from faithful_mishpat.cli import main
 from faithful_mishpat.outputs import FILE_NAMES, MANIFEST_NAME
 from tests import fixtures_gpo as fx
 
@@ -112,35 +112,6 @@ def test_an_ascii_stream_in_this_process_does_not_fail(
     complete(out)
 
 
-def test_a_stream_that_cannot_be_reconfigured_is_still_written_in_ascii(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class Stubborn(io.TextIOWrapper):
-        def reconfigure(self, *_args: object, **_kwargs: object) -> None:
-            raise ValueError("no")
-
-    raw = io.BytesIO()
-    monkeypatch.setattr(
-        sys, "stdout", Stubborn(raw, encoding="ascii", newline="\n", write_through=True)
-    )
-    console.prepare()
-    console.say("démo")
-    assert raw.getvalue() == b"d\\xe9mo\n"
-
-
-@pytest.mark.parametrize("fail_on", ["write", "flush"])
-def test_a_closed_pipe_keeps_the_real_exit_code(
-    pair: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_on: str
-) -> None:
-    monkeypatch.setattr(sys, "stdout", Closed(fail_on=fail_on))
-    out = tmp_path / "report"
-    assert main(["compare", *map(str, pair), "-o", str(out)]) == ExitCode.FINDINGS
-    complete(out)
-    assert sys.stdout is not None
-    if fail_on == "write":
-        assert sys.stdout.name == os.devnull
-
-
 def test_a_closed_pipe_is_not_an_error_for_a_clean_run(
     pair: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -174,33 +145,3 @@ def test_a_real_closed_pipe_keeps_the_exit_code_and_stays_quiet(
     assert b"BrokenPipe" not in stderr
     assert b"internal error" not in stderr
     complete(out)
-
-
-def test_say_to_standard_error_survives_a_closed_stderr(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class Gone(io.TextIOBase):
-        def write(self, text: str) -> int:
-            raise ValueError("I/O operation on closed file")
-
-    monkeypatch.setattr(sys, "stderr", Gone())
-    console.say("hello", err=True)  # must not raise
-
-
-def test_a_closed_standard_output_object_is_not_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    class Gone(io.TextIOBase):
-        def write(self, text: str) -> int:
-            raise ValueError("I/O operation on closed file")
-
-        def flush(self) -> None:
-            raise ValueError("I/O operation on closed file")
-
-        def close(self) -> None:
-            """Do nothing."""
-
-    monkeypatch.setattr(sys, "stdout", Gone())
-    monkeypatch.setattr(sys, "stderr", Gone())
-    console.prepare()
-    console.say("hello")
-    console.say("again")  # printing has stopped, so this is skipped
-    console.finish()  # nothing to flush to, and no error

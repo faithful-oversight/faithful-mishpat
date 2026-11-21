@@ -44,8 +44,9 @@ import uuid
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Protocol
 
+from faithful_core import xmlsafe
+
 from faithful_mishpat.errors import InputError
-from faithful_mishpat.formats import xmlsafe
 from faithful_mishpat.formats.registrypol import read_registry_pol
 from faithful_mishpat.formats.report import read_report
 from faithful_mishpat.model import Gpo, Problem, Source, WmiFilter, evidence_key

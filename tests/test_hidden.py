@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from faithful_mishpat.cli import ExitCode, main
+from faithful_core.exitcodes import ExitCode
+
+from faithful_mishpat.cli import main
 from faithful_mishpat.formats import hidden
 from faithful_mishpat.formats.report import read_report
 from faithful_mishpat.model import Source

@@ -14,15 +14,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from faithful_core import xmlsafe
+from faithful_core.exitcodes import ExitCode
 from hypothesis import given
 from hypothesis import strategies as st
 from jsonschema import FormatChecker
 from jsonschema.validators import validator_for
 
 from faithful_mishpat import __version__, cli, example, pipeline
-from faithful_mishpat.cli import ExitCode, main
+from faithful_mishpat.cli import main
 from faithful_mishpat.collect import secrets
-from faithful_mishpat.formats import registrypol, xmlsafe
+from faithful_mishpat.formats import registrypol
 from faithful_mishpat.outputs import FILE_NAMES, MANIFEST_NAME
 from tests import fixtures_gpo as fx
 
