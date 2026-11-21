@@ -106,9 +106,14 @@ def test_backups_go_to_a_new_random_folder_that_is_removed_in_a_finally_block() 
 
 # --- running the script's functions -----------------------------------------------------
 
-_PWSH = shutil.which("pwsh") or shutil.which("powershell")
+# MISHPAT_PWSH names the PowerShell to test with, such as "powershell" for Windows
+# PowerShell 5.1. Without it the tests use pwsh, then powershell.
+_PWSH_NAME = os.environ.get("MISHPAT_PWSH")
+_PWSH = (
+    shutil.which(_PWSH_NAME) if _PWSH_NAME else shutil.which("pwsh") or shutil.which("powershell")
+)
 if _PWSH is None and os.environ.get("MISHPAT_REQUIRE_PWSH") == "1":  # pragma: no cover
-    msg = "MISHPAT_REQUIRE_PWSH is set but PowerShell is not installed"
+    msg = f"MISHPAT_REQUIRE_PWSH is set but {_PWSH_NAME or 'PowerShell'} is not installed"
     raise RuntimeError(msg)
 needs_pwsh = pytest.mark.skipif(_PWSH is None, reason="PowerShell is not installed")
 
