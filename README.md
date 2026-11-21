@@ -6,7 +6,7 @@
 [![PyPI](https://img.shields.io/pypi/v/faithful-mishpat)](https://pypi.org/project/faithful-mishpat/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: version 0.1.1, beta, available on PyPI.** mishpat reads Group Policy exports end to end and is tested on synthetic data. The two ways to collect an export, the PowerShell exporter and `mishpat collect`, have not yet been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md).
+> **Status: version 0.1.1, beta, available on PyPI.** mishpat reads Group Policy exports end to end and is tested on synthetic data. The two ways to collect an export, the PowerShell exporter and `mishpat collect`, have not yet been run against a real domain, a real domain controller, or a real WinRM endpoint. CI runs the exporter's tests under both Windows PowerShell 5.1 and PowerShell 7. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md).
 
 Documentation is on the [docs site](https://faithful-oversight.github.io/faithful-mishpat/) and in the [docs folder](docs/index.md).
 
