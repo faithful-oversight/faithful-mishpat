@@ -1,6 +1,6 @@
 # Architecture
 
-mishpat is a command-line tool and a Python library with the same core. Reading files needs no runtime dependencies beyond the Python standard library. Remote collection and the secret providers use optional dependencies, installed as extras.
+mishpat is a command-line tool and a Python library with the same core. Reading files needs one runtime dependency beyond the Python standard library: [faithful-core](https://github.com/faithful-oversight/faithful-core), the shared foundation library of the Faithful Oversight tools, pinned to an exact version. Remote collection and the secret providers use optional dependencies, installed as extras.
 
 ```text
  admin workstation or domain controller
@@ -43,16 +43,15 @@ The exporter and `mishpat collect` write the same bundle. Nothing after the read
 | --- | --- |
 | `cli` | The command-line interface, exit codes, and the `compare`, `schema`, and `example` commands. |
 | `arguments` | Argument types shared by the commands: bounded numbers. |
-| `errors` | `MishpatError` and its subclasses `InputError`, `CollectionError`, and `UsageError`. |
+| `errors` | `MishpatError`, which is faithful-core's `FaithfulError`, and the error classes mishpat uses: `InputError`, `CollectionError`, `UsageError`, and `OutputError`. |
 | `model` | The plain data every reader produces: `Snapshot`, `Gpo`, `Setting`, `Trustee`, `Link`, `WmiFilter`, `Scope`, `Problem`, and `Source`. |
-| `formats` | One reader for each kind of input: `report`, `backup`, `bundle`, and `registrypol`, plus `xmlsafe`, the XML parser they share. |
+| `formats` | One reader for each kind of input: `report`, `backup`, `bundle`, and `registrypol`. |
 | `inputs` | Detect the kind of an input and read it into a `Snapshot`. |
 | `pipeline` | Fingerprint both inputs, read them, and compare them. |
 | `compare` | Pair GPOs and compare them. No file access and no output. |
 | `differences` | The records `compare` builds: `Comparison`, `Difference`, `Gap`, and `Pair`. |
-| `outputs` | Build the report document, render each format, write the files all together, and make untrusted text safe. |
-| `collect` | `mishpat collect` and `mishpat exporter`: the remote collection logic, the secret providers, and the checks on names. |
-| `clock` | Write times as text the same way on every platform. |
+| `outputs` | Build the report document, render each format, and write the files all together. |
+| `collect` | `mishpat collect` and `mishpat exporter`: the export bundle's line checks, the script's parameters, and the commands. |
 | `example` | The synthetic bundles for the `example` command and tests. |
 | `data` | The PowerShell exporter `Export-MishpatGpo.ps1`. |
 | `schema` | JSON Schemas for the report, the export bundle, and the manifest. |
@@ -65,7 +64,7 @@ The model keeps a difference between *not captured* and *empty*. A field that an
 
 ## The readers
 
-- `formats.xmlsafe` parses XML with the standard library's `pyexpat`. It refuses a `DOCTYPE` and entity declarations, limits nesting and size, and decodes the bytes itself, ignoring the declared encoding.
+- `faithful_core.xmlsafe` parses the XML for `formats.report` and `formats.backup`, with the standard library's `pyexpat`. It refuses a `DOCTYPE` and entity declarations, limits nesting and size, and decodes the bytes itself, ignoring the declared encoding.
 - `formats.report` reads `Get-GPOReport` XML. It identifies each element by its namespace URI and maps every extension to settings. Extensions it does not know are read generically.
 - `formats.registrypol` reads `Registry.pol` files.
 - `formats.backup` reads backups through an abstract `Tree`, so the same code reads a real folder (`FolderTree`) and the files of a bundle (`MemoryTree`).
@@ -88,12 +87,25 @@ The model keeps a difference between *not captured* and *empty*. A field that an
 | Module | Responsibility |
 | --- | --- |
 | `collect.cli` | Registers `collect` and `exporter` and checks their arguments. |
-| `collect.names` | Checks `--server` and `--username` before any secret is read or any connection is made. |
-| `collect.secrets` | Resolves secret references from six providers, and removes every resolved secret from any text before mishpat prints it. |
-| `collect.remote` | Sends the script to the controller over WinRM with `pypsrp`, streams the lines into a private file, checks the end line, and publishes the file. `pypsrp` is imported only when collection runs. |
-| `collect.script` | Reads the packaged PowerShell script. |
+| `collect.remote` | Checks each line the controller sends, its structure line, and its end line, in a private file. It also builds the script's parameters and the result, and hands the connection to faithful-core. |
+| `collect.script` | Names the packaged PowerShell script and reads it through faithful-core. |
 
 Both collection paths run the same script, so there is one format to read and one script to review. See [Collecting exports](collecting.md).
+
+## The shared library
+
+faithful-core holds the code that every Faithful Oversight tool needs to behave the same way. mishpat uses it for:
+
+- the base error and the exit codes;
+- parsing untrusted XML with limits on size, depth, and element count;
+- making untrusted text safe for the terminal, CSV, Markdown, and HTML;
+- the report time and the way times are written;
+- printing that never changes an exit code;
+- publishing a set of files all together, without replacing a file the tool reads;
+- the checks on `--server` and `--username`, the secret providers, and the redaction of every resolved secret;
+- the WinRM connection, its transport rules, and the loop that takes the controller's output.
+
+The library's own pages describe how each of these works. [ADR 7](adr/0007-shared-core-library.md) records the decision. mishpat's tests cover these through the commands, and the library's tests cover them directly.
 
 ## Rules the design follows
 
@@ -112,7 +124,7 @@ Both collection paths run the same script, so there is one format to read and on
 
 ## Packaging
 
-- Python package on PyPI: `faithful-mishpat`, with the command `mishpat`.
+- Python package on PyPI: `faithful-mishpat`, with the command `mishpat`. Its one runtime dependency is `faithful-core`, pinned to an exact version.
 - Extras: `live` (`pypsrp`), `keyring`, `vault`, `aws`, and `azure`. See the [README](https://github.com/faithful-oversight/faithful-mishpat#install).
 - Further formats, such as a standalone executable or a container image, are added only when a decision record justifies them.
 

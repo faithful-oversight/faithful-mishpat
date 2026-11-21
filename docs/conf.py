@@ -58,6 +58,7 @@ NAVIGATION = {
         "0004-export-bundle",
         "0005-remote-collection",
         "0006-comparison-rules",
+        "0007-shared-core-library",
     ],
 }
 """Page order for the site navigation, keyed by the page that lists them."""
