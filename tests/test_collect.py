@@ -665,8 +665,22 @@ def test_a_collection_without_a_secret_still_publishes(tmp_path: Path) -> None:
 
 def test_pypsrp_missing_says_how_to_install(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "pypsrp.wsman", None)
-    with pytest.raises(CollectionError, match=r'pip install "faithful-mishpat\[live\]"'):
+    with pytest.raises(CollectionError) as caught:
         remote._client()  # noqa: SLF001 - the import boundary itself
+    # pipx refuses a plain install over an installed mishpat, so the pipx form has --force.
+    assert str(caught.value).endswith(
+        'pipx install --force "faithful-mishpat[live]" '
+        '(or, with pip, pip install "faithful-mishpat[live]")'
+    )
+
+
+def test_the_install_hint_names_every_extra_and_points_to_pypi() -> None:
+    hint = names.install_hint("live", "vault")
+    assert hint == (
+        'pipx install --force "faithful-mishpat[live,vault]" '
+        '(or, with pip, pip install "faithful-mishpat[live,vault]")'
+    )
+    assert "git+" not in hint
 
 
 def test_the_real_client_classes_load() -> None:
