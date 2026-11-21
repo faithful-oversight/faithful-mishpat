@@ -3,11 +3,12 @@
 **GPO Change Review.** Produces a readable, reviewable difference between two versions of Group Policy, including links, filters, and inheritance context. It says plainly what it could not compare.
 
 [![CI](https://github.com/faithful-oversight/faithful-mishpat/actions/workflows/ci.yml/badge.svg)](https://github.com/faithful-oversight/faithful-mishpat/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/faithful-mishpat)](https://pypi.org/project/faithful-mishpat/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: version 0.1.1, beta, not yet on PyPI.** mishpat reads Group Policy exports end to end and is tested on synthetic data. The two ways to collect an export, the PowerShell exporter and `mishpat collect`, have not yet been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md).
+> **Status: version 0.1.1, beta, available on PyPI.** mishpat reads Group Policy exports end to end and is tested on synthetic data. The two ways to collect an export, the PowerShell exporter and `mishpat collect`, have not yet been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md).
 
-Documentation is in the [docs folder](docs/index.md). It is also shown on GitHub at [docs](https://github.com/faithful-oversight/faithful-mishpat/tree/main/docs).
+Documentation is on the [docs site](https://faithful-oversight.github.io/faithful-mishpat/) and in the [docs folder](docs/index.md).
 
 ## How it differs from existing tools
 
@@ -56,14 +57,14 @@ See [Limitations](docs/limitations.md) for the full list.
 
 mishpat needs Python 3.11 or newer. Reading files needs no other packages.
 
-PyPI publishing is being set up. Until a PyPI release exists, install from GitHub:
-
 ```shell
-pipx install git+https://github.com/faithful-oversight/faithful-mishpat
+pipx install faithful-mishpat
 pipx ensurepath
 ```
 
-For a fixed version, add the tag: `pipx install git+https://github.com/faithful-oversight/faithful-mishpat@v0.1.1`. `pipx ensurepath` puts the `mishpat` command on your PATH; open a new terminal afterwards.
+`pipx ensurepath` puts the `mishpat` command on your PATH; run it once and open a new terminal afterwards. With pip, use `pip install faithful-mishpat`. For a fixed version, use `faithful-mishpat==0.1.1`.
+
+To try the development version from GitHub, run `pipx install git+https://github.com/faithful-oversight/faithful-mishpat`.
 
 Remote collection needs the `live` extra. Each secret provider has its own extra:
 
@@ -76,16 +77,18 @@ Remote collection needs the `live` extra. Each secret provider has its own extra
 | `azure` | `azure-identity`, `azure-keyvault-secrets` | `--secret azure:...` |
 
 ```shell
-pipx install "faithful-mishpat[live] @ git+https://github.com/faithful-oversight/faithful-mishpat"
-pipx install "faithful-mishpat[live,vault] @ git+https://github.com/faithful-oversight/faithful-mishpat"
+pipx install "faithful-mishpat[live]"
+pipx install "faithful-mishpat[live,vault]"
 ```
+
+If mishpat is already installed, add `--force` to add an extra: `pipx install --force "faithful-mishpat[live]"`. With pip, use `pip install "faithful-mishpat[live]"`.
 
 To work from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start
 
 ```shell
-pipx install git+https://github.com/faithful-oversight/faithful-mishpat
+pipx install faithful-mishpat
 mishpat example ./mishpat-demo
 mishpat compare ./mishpat-demo/corp-before.jsonl ./mishpat-demo/corp-after.jsonl -o ./mishpat-demo/report
 ```

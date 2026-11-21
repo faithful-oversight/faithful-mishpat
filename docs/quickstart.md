@@ -4,15 +4,13 @@ This walk-through takes about ten minutes. It starts with synthetic data, so not
 
 ## 1. Install
 
-PyPI publishing is being set up. Until a PyPI release exists, install from GitHub:
-
 ```shell
-pipx install git+https://github.com/faithful-oversight/faithful-mishpat
+pipx install faithful-mishpat
 pipx ensurepath
 mishpat --version
 ```
 
-For a fixed version, add the tag: `...faithful-mishpat@v0.1.1`. `pipx ensurepath` puts the `mishpat` command on your PATH; open a new terminal afterwards if `mishpat` is not found.
+`pipx ensurepath` puts the `mishpat` command on your PATH; run it once and open a new terminal afterwards if `mishpat` is not found. With pip, use `pip install faithful-mishpat`. For a fixed version, use `faithful-mishpat==0.1.1`. To try the development version, install from GitHub: `pipx install git+https://github.com/faithful-oversight/faithful-mishpat`.
 
 mishpat runs on Windows, macOS, and Linux with Python 3.11 or newer. Reading files needs nothing else. Remote collection needs an extra, which [Collecting exports](collecting.md#remote-collection) explains.
 
@@ -116,7 +114,7 @@ mishpat compare corp-before.jsonl corp-after.jsonl -o report
 `mishpat collect` runs the same script on a domain controller over PowerShell remoting (WinRM), so you install nothing on it. It needs the `live` extra:
 
 ```shell
-pipx install "faithful-mishpat[live] @ git+https://github.com/faithful-oversight/faithful-mishpat"
+pipx install --force "faithful-mishpat[live]"
 export MISHPAT_PASSWORD='...'
 mishpat collect --server dc01.corp.example --all --auth ntlm --username 'CORP\auditor' \
   --secret env:MISHPAT_PASSWORD --ca-file corp-root-ca.pem -o corp-before.jsonl
