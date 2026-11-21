@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from faithful_core import xmlsafe
+from faithful_core.collect import secrets
 from faithful_core.exitcodes import ExitCode
 from hypothesis import given
 from hypothesis import strategies as st
@@ -23,7 +24,6 @@ from jsonschema.validators import validator_for
 
 from faithful_mishpat import __version__, cli, example, pipeline
 from faithful_mishpat.cli import main
-from faithful_mishpat.collect import secrets
 from faithful_mishpat.formats import registrypol
 from faithful_mishpat.outputs import FILE_NAMES, MANIFEST_NAME
 from tests import fixtures_gpo as fx
@@ -356,7 +356,7 @@ def refused(before: Path, after: Path, out: Path, capsys: pytest.CaptureFixture[
     capsys.readouterr()
     assert compare(before, after, out, "--force") == ExitCode.INPUT_ERROR
     captured = capsys.readouterr()
-    assert "would be overwritten" in captured.err or "inside the input folder" in captured.err
+    assert "is the same file as the input" in captured.err or "inside the input " in captured.err
     return captured.err
 
 
@@ -436,7 +436,7 @@ def test_force_never_publishes_inside_an_input_folder(
     other = write(tmp_path / "after.xml", gpo(state="Disabled"))
     before = {p: p.read_bytes() for p in folder.rglob("*") if p.is_file()}
     for out in (folder, folder / "reports"):
-        assert "inside the input folder" in refused(folder, other, out, capsys)
+        assert "inside the input " in refused(folder, other, out, capsys)
     assert {p: p.read_bytes() for p in folder.rglob("*") if p.is_file()} == before
     assert not (folder / "reports").exists()
 

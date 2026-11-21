@@ -12,19 +12,20 @@ from typing import TYPE_CHECKING
 
 from faithful_core import xmlsafe
 from faithful_core.clock import now
+from faithful_core.collect.secrets import redact
 from faithful_core.console import finish, prepare, say
 from faithful_core.exitcodes import ExitCode
+from faithful_core.files import refuse_aliases
 from faithful_core.safety import command_line, terminal_line
 
 from faithful_mishpat import __version__, example, outputs, pipeline
 from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import cli as collect_cli
-from faithful_mishpat.collect.secrets import redact
 from faithful_mishpat.compare import MATCHES
 from faithful_mishpat.errors import MishpatError, UsageError
 from faithful_mishpat.formats import backup, registrypol
 from faithful_mishpat.outputs import render
-from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
+from faithful_mishpat.outputs.files import write_files
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -131,11 +132,10 @@ _count = bounded(1, 1_000_000_000, "a whole number")
 
 def _compare(args: argparse.Namespace) -> int:
     # Before anything is read or written: a report must never replace or enter an input.
-    refuse_input_overwrite(
-        [args.before, args.after],
-        args.output,
-        [outputs.FILE_NAMES[f] for f in args.format if f in outputs.FILE_NAMES]
-        + [outputs.MANIFEST_NAME],
+    planned = [outputs.FILE_NAMES[f] for f in args.format if f in outputs.FILE_NAMES]
+    refuse_aliases(
+        [args.output / name for name in [*planned, outputs.MANIFEST_NAME]],
+        [("input", args.before), ("input", args.after)],
     )
     saved = registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS, xmlsafe.MAX_ELEMENTS
     registrypol.MAX_ENTRIES = args.max_pol_entries
