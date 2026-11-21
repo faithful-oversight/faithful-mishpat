@@ -38,6 +38,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from faithful_mishpat.collect.names import install_hint
 from faithful_mishpat.collect.secrets import redact, remember
 from faithful_mishpat.errors import CollectionError, InputError
 from faithful_mishpat.outputs.files import _copy_new
@@ -53,7 +54,7 @@ POLL_SECONDS = 5
 _END = b'{"end":'
 _FILE = b'{"path":'
 _STRUCTURE = b'{"structure":'
-_INSTALL = 'remote collection needs pypsrp; install it with: pip install "faithful-mishpat[live]"'
+_INSTALL = f"remote collection needs pypsrp; install it with: {install_hint('live')}"
 _BAD_LINE = (ValueError, InputError)
 """What the bundle functions raise for a line that breaks the schema."""
 

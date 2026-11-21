@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, quote_plus
 
+from faithful_mishpat.collect.names import install_hint
 from faithful_mishpat.errors import CollectionError
 
 PROVIDERS = ("env", "file", "keyring", "vault", "aws", "azure")
@@ -116,10 +117,7 @@ def _need(module: str, extra: str) -> Any:
     try:
         return importlib.import_module(module)
     except ImportError as exc:
-        msg = (
-            f"this secret provider needs {module}; "
-            f'install it with: pip install "faithful-mishpat[{extra}]"'
-        )
+        msg = f"this secret provider needs {module}; install it with: {install_hint('live', extra)}"
         raise CollectionError(msg) from exc
 
 

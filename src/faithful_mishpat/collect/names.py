@@ -80,3 +80,13 @@ def account_name(username: str | None) -> str | None:
         )
         raise CollectionError(msg)
     return f"{domain}\\{user}"
+
+
+def install_hint(*extras: str) -> str:
+    """Say how to install mishpat with extras, for pipx and for pip.
+
+    ``pipx install faithful-mishpat[extra]`` is refused when mishpat is already installed,
+    so the pipx command carries ``--force``.
+    """
+    spec = f'"faithful-mishpat[{",".join(extras)}]"'
+    return f"pipx install --force {spec} (or, with pip, pip install {spec})"
