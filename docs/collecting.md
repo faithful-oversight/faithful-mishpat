@@ -2,7 +2,7 @@
 
 mishpat can read `Get-GPOReport` files and `Backup-GPO` folders that you make yourself. See [Input formats](formats.md). It also has an exporter that writes its own [export bundle](formats.md#export-bundle). The bundle records link order, blocked inheritance, and WMI filter queries, which the other two inputs lack.
 
-> **Status: untested on real systems.** The exporter and `mishpat collect` have not been run against a real domain, a real domain controller, a real WinRM endpoint, or Windows PowerShell 5.1. They are tested with synthetic stand-ins for Active Directory and the Group Policy module, and with a simulated WinRM client. Treat the first runs in your environment as a pilot, and check each bundle by comparing it with a report you trust. See [Limitations](limitations.md#how-far-this-release-has-been-tested).
+> **Status: untested on real systems.** The exporter and `mishpat collect` have not been run against a real domain, a real domain controller, or a real WinRM endpoint. They are tested with synthetic stand-ins for Active Directory and the Group Policy module, and with a simulated WinRM client. CI runs the exporter's tests under both Windows PowerShell 5.1 and PowerShell 7. Treat the first runs in your environment as a pilot, and check each bundle by comparing it with a report you trust. See [Limitations](limitations.md#how-far-this-release-has-been-tested).
 
 | Method | Runs | Best for |
 | --- | --- | --- |
