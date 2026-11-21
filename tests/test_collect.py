@@ -756,6 +756,36 @@ def test_collect_checks_everything_before_reading_the_secret(
     assert fetched == []
 
 
+@pytest.mark.parametrize("used", ["ca", "secret"])
+def test_collect_never_replaces_the_file_it_was_told_to_use(
+    used: str, tmp_path: Path, fetched: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The MER-1 / PAK-1 class: ``-o`` equal to the CA file or the secret file, with --force."""
+    called: list[object] = []
+
+    def record(*args: object, **_: object) -> None:
+        called.append(args)
+
+    monkeypatch.setattr(remote, "collect", record)
+    file = tmp_path / "input.txt"
+    file.write_bytes(b"line one\nline two\n")
+    original = file.read_bytes()
+    outputs = [file]
+    if sys.platform != "win32":  # creating a link needs a privilege on Windows
+        (tmp_path / "alias.txt").symlink_to(file)
+        outputs.append(tmp_path / "alias.txt")
+    use = (
+        ["--ca-file", str(file)]
+        if used == "ca"
+        else ["--username", "auditor@corp.example", "--secret", f"file:{file}"]
+    )
+    for out in outputs:
+        with pytest.raises(MishpatError, match="would be overwritten"):
+            invoke(*collect_args(out, "--all", "--force", *use))
+    assert file.read_bytes() == original
+    assert (called, fetched) == ([], [])  # nothing was read, nothing was collected
+
+
 def test_collect_runs_and_says_what_to_do_next(
     tmp_path: Path,
     fetched: list[str],
@@ -795,6 +825,32 @@ def test_collect_runs_and_says_what_to_do_next(
     assert "not read: the sites: Access is denied." in printed
     assert "mishpat compare" in printed
     assert "'" in printed or '"' in printed  # the path with a space is quoted
+
+
+@pytest.mark.usefixtures("fetched")
+def test_a_gap_or_path_with_a_line_break_cannot_add_a_terminal_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    forged = "Exported 0 files from nowhere."
+    gap = f"the sites: Access is denied.\n{forged}"
+
+    def fake_collect(
+        _target: Target, _text: str, _values: dict[str, Any], out: Path, **_options: Any
+    ) -> remote.Result:
+        return remote.Result(out, 1, (gap,))
+
+    monkeypatch.setattr(remote, "collect", fake_collect)
+    args = collect_args(
+        tmp_path / "e.jsonl", "--username", "auditor@corp.example", "--secret", "env:PW", "--all"
+    )
+    assert invoke(*args) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert forged not in lines
+    assert not any(line.strip().startswith(forged) for line in lines)
+    assert f"  not read: the sites: Access is denied.\\n{forged}" in lines
+    assert len(lines) == 3
 
 
 def test_collect_with_the_current_kerberos_ticket_and_every_gpo(

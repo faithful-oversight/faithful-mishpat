@@ -73,8 +73,10 @@ LIMITATIONS = (
         "record them."
     ),
     (
-        "Security filtering and delegation are compared as the SIDs and rights on the GPO. "
-        "Group membership is not expanded, so the report does not say who is covered."
+        "Security filtering and delegation are compared as the SIDs and rights on the GPO, "
+        "a permission with no named right by its access mask, and the owner, the primary group "
+        "and the raw descriptor text when the input records them. Group membership is not "
+        "expanded, so the report does not say who is covered."
     ),
     (
         "Version numbers, modified times and policy explanation text are neither compared nor "

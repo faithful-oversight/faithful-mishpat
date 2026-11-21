@@ -13,7 +13,9 @@ Input is the abstract :class:`Tree`, so the same reader serves a real folder
 A root is any folder that is not itself a backup folder: every folder below it (up to
 :data:`MAX_SEARCH_DEPTH` levels, so grouped layouts work) that holds ``bkupInfo.xml`` is
 one GPO. Two backups of the same GPO GUID under one root are ambiguous, which raises
-:class:`~faithful_mishpat.errors.InputError` naming both folders.
+:class:`~faithful_mishpat.errors.InputError` naming both folders. A ``bkupInfo.xml`` that
+the search does not read, because it is deeper than that or inside another backup folder,
+is a problem, so the input is never reported as read in full (see :func:`search_backups`).
 
 Per backup the GPO is the one in ``gpreport.xml``, plus the ``Registry.pol`` values (the
 report has no registry key for Administrative Templates). Without a usable
@@ -56,6 +58,11 @@ MAX_FILE = 64 * 1024 * 1024
 """Largest single file read from a backup, in bytes."""
 MAX_SEARCH_DEPTH = 4
 """How many folder levels below a root are searched for backups."""
+MAX_SCAN_FOLDERS = 200_000
+"""How many folders beyond that depth are listed, only to find a backup that would not be read.
+
+``mishpat compare --max-scan-folders`` changes it. Reaching it is a problem, so the run is
+incomplete and fails."""
 
 _WMI_ID = re.compile(r'ID\s*=\s*"(\{[^"]*\})"', re.IGNORECASE)
 _USER_OFF = 1
@@ -98,10 +105,17 @@ class FolderTree:
         """Read the folder at ``root``."""
         self.root = root
         self.skipped: list[str] = []
+        self._skipped: set[str] = set()
 
     @staticmethod
     def _is_link(entry: os.DirEntry[str]) -> bool:
         return entry.is_symlink()
+
+    def _skip(self, path: str) -> None:
+        """Record a skipped entry once, however many times its folder is listed."""
+        if path not in self._skipped:
+            self._skipped.add(path)
+            self.skipped.append(path)
 
     def entries(self, path: str) -> list[tuple[str, bool]]:
         """List a folder, leaving out links and anything that is not a file or folder."""
@@ -112,7 +126,7 @@ class FolderTree:
                 for entry in scan:
                     is_dir = entry.is_dir(follow_symlinks=False)
                     if self._is_link(entry) or not (is_dir or entry.is_file(follow_symlinks=False)):
-                        self.skipped.append(f"{path}/{entry.name}" if path else entry.name)
+                        self._skip(f"{path}/{entry.name}" if path else entry.name)
                         continue
                     kept.append((entry.name, is_dir))
                 return sorted(kept)
@@ -225,11 +239,66 @@ def _resolve(tree: Tree, folder: str, *names: str) -> str | None:
     return current
 
 
-def find_backups(tree: Tree) -> list[str]:
-    """Return the folders (relative paths, ``""`` for the root) that hold ``bkupInfo.xml``."""
+@dataclass
+class BackupSearch:
+    """Where the search for backups looked, and what it saw but did not read.
+
+    Attributes:
+        folders: The folders (relative paths, ``""`` for the root) that hold ``bkupInfo.xml``
+            within the search depth. These are read.
+        unread: ``(folder, reason)`` for every place the search met something it did not
+            read: a folder with ``bkupInfo.xml`` below the search depth, or one inside another
+            backup, a folder that could not be listed, or the point where the search gave
+            up. Each becomes a problem, so the input is never reported as read in full.
+    """
+
+    folders: list[str] = field(default_factory=list)
+    unread: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _deeper(tree: Tree, start: str, found: BackupSearch, budget: list[int], *, why: str) -> None:
+    """Look below ``start`` only for ``bkupInfo.xml``, which is recorded but not read.
+
+    At most ``budget[0]`` folders are listed in all; the search then says it gave up.
+    """
+    pending = [start]
+    while pending:
+        folder = pending.pop()
+        if budget[0] <= 0:
+            reason = (
+                f"the search for backups below this folder stopped after {MAX_SCAN_FOLDERS} "
+                f"folders; a backup {why} would not have been found"
+            )
+            found.unread.append((folder, reason))
+            return
+        budget[0] -= 1
+        entries = tree.entries(folder)
+        for name, is_folder in entries:
+            if not is_folder:
+                continue
+            path = _join(folder, name)
+            try:
+                holds_backup = _lookup(tree, path, "bkupInfo.xml", want_folder=False) is not None
+            except TreeError as exc:
+                found.unread.append(
+                    (path, f"it could not be listed, so backups in it were not looked for: {exc}")
+                )
+                continue
+            if holds_backup:
+                found.unread.append((path, f"a backup {why} was not read"))
+            else:
+                pending.append(path)
+
+
+def search_backups(tree: Tree) -> BackupSearch:
+    """Find the backups to read, and say what the search saw below them and did not read."""
+    found = BackupSearch()
+    budget = [MAX_SCAN_FOLDERS]
     if _lookup(tree, "", "bkupInfo.xml", want_folder=False) is not None:
-        return [""]
-    found: list[str] = []
+        found.folders.append("")
+        _deeper(tree, "", found, budget, why="inside another backup folder")
+        return found
+    deep = f"more than {MAX_SEARCH_DEPTH} folders below the input"
 
     def search(folder: str, depth: int) -> None:
         for name, is_folder in tree.entries(folder):
@@ -237,12 +306,21 @@ def find_backups(tree: Tree) -> list[str]:
                 continue
             path = _join(folder, name)
             if _lookup(tree, path, "bkupInfo.xml", want_folder=False) is not None:
-                found.append(path)
+                found.folders.append(path)
             elif depth < MAX_SEARCH_DEPTH:
                 search(path, depth + 1)
+            else:
+                _deeper(tree, path, found, budget, why=deep)
 
     search("", 1)
+    for selected in list(found.folders):  # a backup below the root can hold another one too
+        _deeper(tree, selected, found, budget, why="inside another backup folder")
     return found
+
+
+def find_backups(tree: Tree) -> list[str]:
+    """Return the folders (relative paths, ``""`` for the root) that hold ``bkupInfo.xml``."""
+    return search_backups(tree).folders
 
 
 @dataclass
@@ -278,7 +356,7 @@ class _Reader:
     def xml(self, path: str) -> ET.Element | None:
         """Read and parse a small XML file; a failure is recorded and gives ``None``."""
         try:
-            return xmlsafe.parse(self.tree.read(path))
+            return xmlsafe.parse(self.tree.read(path), max_elements=xmlsafe.MAX_ELEMENTS)
         except TreeError as exc:
             self.problem(path, str(exc))
         except xmlsafe.XmlError as exc:
@@ -458,13 +536,15 @@ def read_backups(
     """
     reader = _Reader(tree, name, origin, bundle)
     try:
-        folders = find_backups(tree)
+        search = search_backups(tree)
     except TreeError as exc:
         msg = f"{name}: {exc}"
         raise InputError(msg) from None
+    for where, reason in search.unread:
+        reader.problem(where, reason)
     result = BackupRead()
     seen: dict[str, str] = {}
-    for folder in folders:
+    for folder in search.folders:
         try:
             gpo = _read_one(reader, folder)
         except TreeError as exc:  # a folder that cannot be listed, or an ambiguous name

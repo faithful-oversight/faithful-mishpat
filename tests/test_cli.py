@@ -22,6 +22,7 @@ from jsonschema.validators import validator_for
 from faithful_mishpat import __version__, cli, example, pipeline
 from faithful_mishpat.cli import ExitCode, main
 from faithful_mishpat.collect import secrets
+from faithful_mishpat.formats import registrypol, xmlsafe
 from faithful_mishpat.outputs import FILE_NAMES, MANIFEST_NAME
 from tests import fixtures_gpo as fx
 
@@ -163,6 +164,35 @@ def test_two_different_inputs_with_no_differences_exit_0(
     assert names(out) == sorted(ALL_FILES)
 
 
+def test_a_backup_nested_in_a_grouped_backup_is_never_a_clean_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """MIS-R1: changing only the inner GPO of ``Outer/`` and ``Outer/Sub/`` must not exit 0."""
+
+    def tree(root: Path, inner: str) -> Path:
+        outer_files = fx.backup_files(
+            fx.GUID_A, "Outer", prefix="Outer", report=fx.report_bytes(gpo())
+        )
+        inner_files = fx.backup_files(
+            fx.GUID_B,
+            "Inner",
+            backup_id=fx.BACKUP_B,
+            prefix="Outer/Sub",
+            report=fx.report_bytes(gpo(fx.GUID_B, "Inner", inner)),
+        )
+        fx.write_tree(root, {**outer_files, **inner_files})
+        return root
+
+    before, after = tree(tmp_path / "before", "Enabled"), tree(tmp_path / "after", "Disabled")
+    out = tmp_path / "out"
+    assert compare(before, after, out) == ExitCode.FINDINGS
+    printed = capsys.readouterr().out
+    assert "Every input was read in full" not in printed
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("inside another backup folder" in p["reason"] for p in document["problems"])
+
+
 def test_inputs_with_the_same_contents_are_a_usage_error(
     pair: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -170,7 +200,7 @@ def test_inputs_with_the_same_contents_are_a_usage_error(
     out = tmp_path / "out"
     assert compare(pair[0], Path(copy), out) == ExitCode.USAGE
     err = capsys.readouterr().err
-    assert "before.xml and copy.xml have the same contents; compare two different versions" in err
+    assert f"{pair[0]} and {copy} have the same contents; compare two different versions" in err
     assert not out.exists()
 
 
@@ -188,14 +218,14 @@ def test_inputs_that_cannot_be_read_are_input_errors(
 ) -> None:
     out = tmp_path / "out"
     assert compare(pair[0], tmp_path / "gone.xml", out) == ExitCode.INPUT_ERROR
-    assert "cannot read gone.xml" in capsys.readouterr().err
+    assert f"cannot read {tmp_path / 'gone.xml'}: " in capsys.readouterr().err
     junk = tmp_path / "notes.txt"
     junk.write_text("hello", encoding="utf-8")
     assert compare(pair[0], junk, out) == ExitCode.INPUT_ERROR
-    assert "notes.txt is not a Get-GPOReport XML file" in capsys.readouterr().err
+    assert f"{junk} is not a Get-GPOReport XML file" in capsys.readouterr().err
     (tmp_path / "empty").mkdir()
     assert compare(pair[0], tmp_path / "empty", out) == ExitCode.INPUT_ERROR
-    assert "empty is not a Backup-GPO folder" in capsys.readouterr().err
+    assert f"{tmp_path / 'empty'} is not a Backup-GPO folder" in capsys.readouterr().err
     assert not out.exists()
 
 
@@ -309,6 +339,135 @@ def test_an_unknown_fail_on_is_a_usage_error(
 ) -> None:
     assert compare(*pair, tmp_path / "out", "--fail-on", "sometimes") == ExitCode.USAGE
     assert "invalid choice" in capsys.readouterr().err
+
+
+# --- compare: a report is never published over an input -----------------------------------
+
+needs_links = pytest.mark.skipif(
+    sys.platform == "win32", reason="creating a link needs a privilege on Windows"
+)
+REPORT_NAMES = [*FILE_NAMES.values(), MANIFEST_NAME]
+
+
+def refused(before: Path, after: Path, out: Path, capsys: pytest.CaptureFixture[str]) -> str:
+    """Run ``compare --force`` and return the error: the run must stop with exit 3."""
+    capsys.readouterr()
+    assert compare(before, after, out, "--force") == ExitCode.INPUT_ERROR
+    captured = capsys.readouterr()
+    assert "would be overwritten" in captured.err or "inside the input folder" in captured.err
+    return captured.err
+
+
+@pytest.mark.parametrize("name", REPORT_NAMES)
+def test_force_never_replaces_an_input_file_with_a_report(
+    name: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The MER-1 / PAK-1 class: an input named like a report file, in the output folder."""
+    one = write(tmp_path / name, gpo())
+    other = write(tmp_path / "other.xml", gpo(state="Disabled"))
+    original = one.read_bytes()
+    error = refused(one, other, tmp_path, capsys)
+    assert str(one) in error
+    assert one.read_bytes() == original
+    assert names(tmp_path) == sorted([name, "other.xml"])  # nothing else was written either
+    capsys.readouterr()
+    assert compare(other, one, tmp_path, "--force") == ExitCode.INPUT_ERROR  # either side
+    assert one.read_bytes() == original
+
+
+def test_force_never_replaces_an_export_bundle_input(tmp_path: Path) -> None:
+    bundle = tmp_path / FILE_NAMES["json"]
+    bundle.write_bytes(
+        fx.bundle_bytes(fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo())))
+    )
+    other = write(tmp_path / "other.xml", gpo(state="Disabled"))
+    original = bundle.read_bytes()
+    assert compare(bundle, other, tmp_path, "--force") == ExitCode.INPUT_ERROR
+    assert bundle.read_bytes() == original
+
+
+@needs_links
+def test_a_symbolic_link_to_an_input_is_refused_in_every_position(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    one = write(inputs / "before.xml", gpo())
+    other = write(inputs / "after.xml", gpo(state="Disabled"))
+    original = one.read_bytes()
+    # A report name that is a link to the input.
+    out = tmp_path / "linked-name"
+    out.mkdir()
+    (out / FILE_NAMES["md"]).symlink_to(one)
+    refused(one, other, out, capsys)
+    # An output folder that is a link to the input folder.
+    alias = tmp_path / "alias"
+    alias.symlink_to(inputs, target_is_directory=True)
+    named = write(inputs / FILE_NAMES["json"], gpo())
+    kept = named.read_bytes()
+    refused(named, other, alias, capsys)
+    assert named.read_bytes() == kept
+    assert one.read_bytes() == original
+
+
+@needs_links
+def test_a_hard_link_to_an_input_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    one = write(tmp_path / "before.xml", gpo())
+    other = write(tmp_path / "after.xml", gpo(state="Disabled"))
+    out = tmp_path / "out"
+    out.mkdir()
+    os.link(one, out / MANIFEST_NAME)
+    original = one.read_bytes()
+    refused(one, other, out, capsys)
+    assert one.read_bytes() == original
+    assert (out / MANIFEST_NAME).read_bytes() == original
+
+
+def test_force_never_publishes_inside_an_input_folder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = tmp_path / "bk"
+    fx.write_tree(folder, fx.backup_files(report=fx.report_bytes(gpo())))
+    (folder / FILE_NAMES["json"]).write_bytes(b"part of the folder")
+    other = write(tmp_path / "after.xml", gpo(state="Disabled"))
+    before = {p: p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+    for out in (folder, folder / "reports"):
+        assert "inside the input folder" in refused(folder, other, out, capsys)
+    assert {p: p.read_bytes() for p in folder.rglob("*") if p.is_file()} == before
+    assert not (folder / "reports").exists()
+
+
+@needs_links
+def test_a_link_from_the_output_folder_into_an_input_folder_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = tmp_path / "bk"
+    fx.write_tree(folder, fx.backup_files(report=fx.report_bytes(gpo())))
+    member = next(p for p in sorted(folder.rglob("*.xml")) if p.is_file())
+    other = write(tmp_path / "after.xml", gpo(state="Disabled"))
+    original = member.read_bytes()
+    for kind, name in (("hard", FILE_NAMES["md"]), ("symbolic", FILE_NAMES["html"])):
+        out = tmp_path / f"{kind}-out"
+        out.mkdir()
+        if kind == "hard":
+            os.link(member, out / name)
+        else:
+            (out / name).symlink_to(member)
+        refused(folder, other, out, capsys)
+    assert member.read_bytes() == original
+
+
+def test_a_report_folder_that_merely_neighbours_the_inputs_still_works(tmp_path: Path) -> None:
+    before, after = (
+        write(tmp_path / "before.xml", gpo()),
+        write(tmp_path / "after.xml", gpo(state="Disabled")),
+    )
+    out = tmp_path / "reports"
+    for _ in range(2):  # the second run replaces the first run's reports, as --force always did
+        assert compare(before, after, out, "--force") == ExitCode.FINDINGS
+    assert names(out) == sorted(REPORT_NAMES)
 
 
 # --- compare: --match -------------------------------------------------------------------
@@ -622,7 +781,8 @@ def test_errors_never_print_a_secret_the_process_resolved(
     assert compare(pair[0], odd, tmp_path / "out") == ExitCode.INPUT_ERROR
     err = capsys.readouterr().err
     assert "hunter2" not in err
-    assert "cannot read [redacted]" in err
+    assert f"cannot read {tmp_path}" in err
+    assert "[redacted].xml" in err
 
 
 def test_an_output_folder_that_cannot_be_made_leaves_nothing_behind(
@@ -632,3 +792,187 @@ def test_an_output_folder_that_cannot_be_made_leaves_nothing_behind(
     blocked.write_text("a file", encoding="utf-8")
     assert compare(*pair, blocked / "inside") == ExitCode.INPUT_ERROR
     assert blocked.read_text(encoding="utf-8") == "a file"
+
+
+# --- owner and custom permissions are compared, never passed over (MISHPAT-C01) ---------------
+
+
+def test_a_changed_owner_and_a_custom_permission_are_not_a_clean_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    custom = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\evil", "", mask=131072)
+    before = write(tmp_path / "before.xml", gpo())
+    after = write(
+        tmp_path / "after.xml",
+        fx.gpo_xml(
+            computer=fx.registry_ext(fx.policy("Allow thing", "Enabled")),
+            sddl="O:S-1-5-21-1000-2000-3000-1999G:DAD:PAI",
+            trustees=fx.DEFAULT_TRUSTEES + custom,
+        ),
+    )
+    out = tmp_path / "out"
+    assert compare(before, after, out) == ExitCode.FINDINGS
+    said = capsys.readouterr().out
+    assert "No differences" not in said
+    subjects = {(d["category"], d["subject"]) for d in report(out)["differences"]}
+    assert ("permissions", "owner") in subjects
+    assert ("permissions", "evil (S-1-5-21-1000-2000-3000-1500)") not in subjects
+    assert ("permissions", "CORP\\evil (S-1-5-21-1000-2000-3000-1500)") in subjects
+
+
+def test_a_permission_the_reader_cannot_interpret_makes_the_run_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    odd = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\x", "", mask="not a number")
+    before = write(tmp_path / "before.xml", gpo())
+    after = write(
+        tmp_path / "after.xml",
+        fx.gpo_xml(
+            computer=fx.registry_ext(fx.policy("Allow thing", "Disabled")),
+            trustees=fx.DEFAULT_TRUSTEES + odd,
+        ),
+    )
+    out = tmp_path / "out"
+    compare(before, after, out)
+    said = capsys.readouterr().out
+    assert "Every input was read in full" not in said
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("TrusteePermissions" in p["detail"] for p in document["problems"])
+
+
+def test_a_backup_too_deep_to_be_read_is_a_problem_not_a_clean_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    shallow = fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo()))
+    deep = fx.backup_files(
+        fx.GUID_B,
+        "Deep",
+        backup_id=fx.BACKUP_B,
+        prefix="a/b/c/d/e/" + fx.BACKUP_B,
+        report=fx.report_bytes(gpo(fx.GUID_B, "Deep")),
+    )
+    fx.write_tree(tmp_path / "before", shallow)
+    fx.write_tree(tmp_path / "after", {**shallow, **deep})
+    out = tmp_path / "out"
+    assert compare(tmp_path / "before", tmp_path / "after", out) == ExitCode.FINDINGS
+    said = capsys.readouterr().out
+    assert "Every input was read in full" not in said
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("was not read" in p["reason"] for p in document["problems"])
+
+
+# --- limits are overridable and never silent (owner decision) ---------------------------------
+
+
+def pol_backup(root: Path, entries: int) -> Path:
+    pol = fx.registry_pol([("Software\\X", f"V{n}", 4, fx.dword(n)) for n in range(entries)])
+    files = fx.backup_files(report=fx.report_bytes(gpo()), machine_pol=pol)
+    fx.write_tree(root, files)
+    return root
+
+
+def test_the_registry_pol_limit_fails_the_run_and_can_be_raised(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    before, after = pol_backup(tmp_path / "b", 5), pol_backup(tmp_path / "a", 6)
+    out = tmp_path / "out"
+    code = compare(before, after, out, "--max-pol-entries", "3", "--fail-on", "incomplete")
+    assert code == ExitCode.FINDINGS
+    document = report(out)
+    assert document["summary"]["complete"] is False
+    assert any("more than 3 entries" in p["reason"] for p in document["problems"])
+    assert "Every input was read in full" not in capsys.readouterr().out
+    assert (
+        compare(
+            before, after, tmp_path / "out2", "--max-pol-entries", "10", "--fail-on", "incomplete"
+        )
+        == ExitCode.OK
+    )
+    assert registrypol.MAX_ENTRIES == 1_000_000  # the option never leaks past the run
+
+
+def test_the_scan_limit_fails_the_run_and_can_be_raised(tmp_path: Path) -> None:
+    deep = "/".join(["d"] * 4)
+    files = {f"{deep}/x{n}/y/file.txt": b"x" for n in range(5)}
+    fx.write_tree(
+        tmp_path / "b", {**fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo()))}
+    )
+    changed = fx.backup_files(prefix=fx.BACKUP_A, report=fx.report_bytes(gpo(state="Disabled")))
+    fx.write_tree(tmp_path / "a", {**changed, **files})
+    out = tmp_path / "out"
+    code = compare(
+        tmp_path / "b", tmp_path / "a", out, "--max-scan-folders", "2", "--fail-on", "incomplete"
+    )
+    assert code == ExitCode.FINDINGS
+    assert any("stopped after 2 folders" in p["reason"] for p in report(out)["problems"])
+    code = compare(
+        tmp_path / "b",
+        tmp_path / "a",
+        tmp_path / "out2",
+        "--max-scan-folders",
+        "100",
+        "--fail-on",
+        "incomplete",
+    )
+    assert code == ExitCode.OK
+
+
+@pytest.mark.parametrize("option", ["--max-pol-entries", "--max-scan-folders"])
+@pytest.mark.parametrize("value", ["0", "-1", "many"])
+def test_the_limit_options_refuse_nonsense(
+    pair: tuple[Path, Path], tmp_path: Path, option: str, value: str
+) -> None:
+    assert compare(*pair, tmp_path / "o", option, value) == ExitCode.USAGE
+
+
+def test_the_xml_element_limit_is_refused_and_can_be_raised(
+    pair: tuple[Path, Path], tmp_path: Path
+) -> None:
+    assert compare(*pair, tmp_path / "o", "--max-xml-elements", "10") == ExitCode.INPUT_ERROR
+    assert not (tmp_path / "o").exists()
+    assert compare(*pair, tmp_path / "o2", "--max-xml-elements", "100000") == ExitCode.FINDINGS
+    assert xmlsafe.MAX_ELEMENTS == 1_000_000
+
+
+# --- a value with a line break cannot add a terminal line ------------------------------------
+
+FORGED = "No differences found."
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not allow line breaks in names")
+def test_names_and_messages_with_line_breaks_stay_on_one_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A path, a file name, or an error message is one line, however it is written."""
+    folder = tmp_path / f"d\n{FORGED}"
+    assert main(["example", str(folder)]) == ExitCode.OK
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[0].startswith("Wrote a synthetic before and after to ")
+    assert lines[1].startswith("  mishpat compare ")
+    assert len(lines) == 2
+
+    before, after = (folder / name for name in example.NAMES)
+    out = folder / f"r\r\n{FORGED}"
+    assert compare(before, after, out) == ExitCode.FINDINGS
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[-1].startswith("Reports written to ")
+    assert "\\n" in lines[-1]
+
+    missing = tmp_path / f"m\n{FORGED}.xml"
+    assert compare(missing, after, tmp_path / "x") == ExitCode.INPUT_ERROR
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1
+    assert "\\n" in err
+
+    monkeypatch.setattr(pipeline, "run", broken(f"first\n{FORGED}\r\nthird"))
+    assert compare(before, after, tmp_path / "y") == ExitCode.INTERNAL_ERROR
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[0] == f"mishpat: internal error: RuntimeError: first\\n{FORGED}\\r\\nthird"
+    assert lines[1].startswith("This is a bug in mishpat")
+    assert len(lines) == 2

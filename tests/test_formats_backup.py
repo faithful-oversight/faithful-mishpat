@@ -172,12 +172,116 @@ def test_the_root_itself_is_a_backup_when_it_has_bkupinfo() -> None:
     assert [g.name for g in read_backups(tree, "t").gpos] == ["Outer"]
 
 
-def test_search_stops_at_the_depth_limit() -> None:
+def test_search_reads_to_the_depth_limit() -> None:
     files = backup_files(prefix="/".join(["d"] * backup.MAX_SEARCH_DEPTH), report=report())
     assert len(find_backups(MemoryTree(files))) == 1
-    deeper = backup_files(prefix="/".join(["d"] * (backup.MAX_SEARCH_DEPTH + 1)), report=report())
+    result = read_backups(MemoryTree(files), "t")
+    assert len(result.gpos) == 1
+    assert result.problems == []
+
+
+def test_a_backup_below_the_depth_limit_is_a_problem_not_silence() -> None:
+    prefix = "/".join(["d"] * (backup.MAX_SEARCH_DEPTH + 1))
+    deeper = backup_files(prefix=prefix, report=report())
     assert find_backups(MemoryTree(deeper)) == []
-    assert read_backups(MemoryTree(deeper), "t").gpos == []
+    result = read_backups(MemoryTree(deeper), "t")
+    assert result.gpos == []
+    (problem,) = result.problems
+    assert problem.source.detail == prefix
+    assert f"more than {backup.MAX_SEARCH_DEPTH} folders below the input" in problem.reason
+    assert "was not read" in problem.reason
+
+
+def test_a_deep_backup_beside_a_shallow_one_is_still_a_problem() -> None:
+    files = {
+        **backup_files(GUID_A, "Shallow", prefix=BACKUP_A, report=report(GUID_A, "Shallow")),
+        **backup_files(
+            GUID_B,
+            "Deep",
+            backup_id=BACKUP_B,
+            prefix="a/b/c/d/e/" + BACKUP_B,
+            report=report(GUID_B, "Deep"),
+        ),
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert [g.name for g in result.gpos] == ["Shallow"]
+    (problem,) = result.problems
+    assert problem.source.detail == f"a/b/c/d/e/{BACKUP_B}"
+
+
+def test_a_backup_inside_the_backup_at_the_root_is_a_problem() -> None:
+    files = {
+        **backup_files(GUID_A, "Outer", report=report(GUID_A, "Outer")),
+        **backup_files(GUID_B, "Inner", prefix="Sub", report=report(GUID_B, "Inner")),
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert [g.name for g in result.gpos] == ["Outer"]
+    (problem,) = result.problems
+    assert "inside another backup folder" in problem.reason
+
+
+def test_a_backup_inside_a_selected_child_backup_is_a_problem() -> None:
+    """MIS-R1: a nested backup beneath a backup found below the root was never looked for."""
+    files = {
+        **backup_files(GUID_A, "Outer", prefix="Outer", report=report(GUID_A, "Outer")),
+        **backup_files(GUID_B, "Inner", prefix="Outer/Sub", report=report(GUID_B, "Inner")),
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert [g.name for g in result.gpos] == ["Outer"]
+    (problem,) = result.problems
+    assert problem.source.detail == "Outer/Sub"
+    assert "inside another backup folder" in problem.reason
+
+
+def test_every_selected_backup_in_a_group_is_searched_for_nested_ones() -> None:
+    files = {
+        **backup_files(GUID_A, "One", prefix="g/one", report=report(GUID_A, "One")),
+        **backup_files(GUID_B, "Two", prefix="g/two", report=report(GUID_B, "Two")),
+        **backup_files(fx.GUID_C, "Deep", prefix="g/two/x/y/z", report=report(fx.GUID_C, "Deep")),
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert sorted(g.name for g in result.gpos) == ["One", "Two"]
+    (problem,) = result.problems
+    assert problem.source.detail == "g/two/x/y/z"
+    assert "inside another backup folder" in problem.reason
+
+
+def test_the_nested_search_shares_one_budget_across_selected_backups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(backup, "MAX_SCAN_FOLDERS", 4)
+    files = {
+        **backup_files(GUID_A, "One", prefix="one", report=report(GUID_A, "One")),
+        **backup_files(GUID_B, "Two", prefix="two", report=report(GUID_B, "Two")),
+        **{f"one/n{n}/file.txt": b"x" for n in range(5)},
+        **{f"two/m{n}/file.txt": b"x" for n in range(5)},
+    }
+    result = read_backups(MemoryTree(files), "t")
+    assert sorted(g.name for g in result.gpos) == ["One", "Two"]
+    assert any("stopped after 4 folders" in p.reason for p in result.problems)
+
+
+def test_the_search_below_the_depth_limit_gives_up_openly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(backup, "MAX_SCAN_FOLDERS", 3)
+    files = {f"{'/'.join(['d'] * 4)}/x{n}/y/file.txt": b"x" for n in range(10)}
+    result = read_backups(MemoryTree(files), "t")
+    assert result.gpos == []
+    assert any("stopped after 3 folders" in p.reason for p in result.problems)
+
+
+def test_a_folder_below_the_limit_that_cannot_be_listed_is_a_problem() -> None:
+    class Refusing(MemoryTree):
+        def entries(self, path: str) -> list[tuple[str, bool]]:
+            if path.endswith("x"):
+                msg = "permission denied"
+                raise TreeError(msg)
+            return super().entries(path)
+
+    files = {f"{'/'.join(['d'] * 4)}/x/file.txt": b"x"}
+    result = read_backups(Refusing(files), "t")
+    (problem,) = result.problems
+    assert "could not be listed" in problem.reason
+    assert "permission denied" in problem.reason
 
 
 def test_two_backups_of_the_same_gpo_are_an_input_error_naming_both() -> None:

@@ -253,12 +253,23 @@ function Get-DomainFacts {
     }
 }
 
+function New-DirectoryEntry([string] $DistinguishedName) {
+    # The one place a directory object is opened, so a test can stand in for it.
+    [adsi] (Get-LdapPath $DistinguishedName)
+}
+
+function New-DirectorySearcher([string] $Filter) {
+    # The one place a searcher is created, so a test can stand in for it.
+    [adsisearcher] $Filter
+}
+
 function Search-Directory([string] $BaseDn, [string] $Filter, [string[]] $Properties, [string] $Scope) {
     # Returns one hashtable per object found, with every requested property under its
     # lower-case name (the first value as text or number, or $null when absent). A base
-    # that does not exist returns nothing. $Scope is Base, OneLevel or Subtree.
-    $entry = [adsi] (Get-LdapPath $BaseDn)
-    $searcher = [adsisearcher] $Filter
+    # that does not exist returns nothing. $Scope is Base, OneLevel or Subtree. The rows are
+    # sent down the pipeline one by one, so callers wrap the call in @().
+    $entry = New-DirectoryEntry $BaseDn
+    $searcher = New-DirectorySearcher $Filter
     $found = $null
     try {
         $searcher.SearchRoot = $entry
@@ -280,7 +291,9 @@ function Search-Directory([string] $BaseDn, [string] $Filter, [string[]] $Proper
             }
             $rows.Add($row)
         }
-        , $rows.ToArray()
+        # One row at a time. A leading comma would send the whole array as a single
+        # object, and the callers' @(...) would then hold one System.Object[], not rows.
+        foreach ($row in $rows) { $row }
     } finally {
         if ($null -ne $found) { $found.Dispose() }
         $searcher.Dispose()

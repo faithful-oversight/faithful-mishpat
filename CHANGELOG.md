@@ -6,8 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
 ### Fixed
 
+- A changed GPO owner or primary group, an added trustee with a custom access mask, a changed mask, and a change in the raw security descriptor are now compared. They were passed over while the report said "No differences. Every input was read in full."
+- A permission entry or security descriptor text that mishpat cannot read is now a problem, so the comparison is incomplete. An input that records none of the owner, group or descriptor text is listed under Not compared.
+- A backup folder more than four levels below the input, or inside another backup, is now a problem. It was skipped while the report said every input was read in full.
+- A backup nested inside a backup that was found below the root, such as `Outer/Sub` beside `Outer`, is now a problem too. Only a backup at the root was checked for nested ones, so changing just the inner one still ended with "No differences. Every input was read in full." and exit 0. One search budget is shared by every selected backup.
+- The exit code survives a summary that cannot be printed. A closed pipe or a stream that cannot encode a character in a path no longer turns a finished run into exit 4; unencodable characters are written as backslash escapes.
+- A number of thousands of digits in a report no longer ends the run with an internal error. Numbers are read as numbers only when they are one to 20 ASCII digits.
+- A value that changes only its type, such as the text "5" becoming the number 5, now shows its type in the Markdown, HTML and CSV reports.
+- Two scopes in a bundle that read as the same path (such as `OU=A/B` and `OU=B` inside `OU=A`) are now a problem, because a change to one of their links could not be told apart.
+- Rendering Markdown and HTML no longer slows down sharply with thousands of changed GPOs.
+- A `Registry.pol` file is read up to 1,000,000 entries, and a larger one is a problem (the run exits 1), which bounds memory use. `mishpat compare --max-pol-entries` and `--max-scan-folders` raise or lower the two limits.
+- Text that follows a child element, and nested elements named `Blocked` or `ReadTime`, are now compared inside an extension mishpat has no reader for.
+- A `Registry.pol` string that starts like the internal password stand-in is no longer shown as a stored password.
+- A bundle saved with a byte order mark or as UTF-16 is now named as such instead of as bad XML.
+- Error messages for an input that cannot be read now name the path as you gave it, not only the file name.
 - The source archive's own tests now run in the build check: it unpacks the archive outside the checkout and runs the whole suite there, instead of only collecting the tests.
 - Editing a pull request title now reruns the title check, so a corrected title clears the required check.
 - The dependency audit writes its export to a private temporary directory, so a planted link or a second run at the same time cannot interfere.
@@ -15,6 +31,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The release script now treats only a clean "not found" answer as an absent tag; an authentication, rate-limit, network, or malformed answer stops the release.
 - The dependency audit always includes every optional extra, and a new check fails it when a package named by an extra is missing from the audited export.
 - The release evidence is now one SBOM per scope: `sbom-base.cdx.json` for the base install, and `sbom-all-extras.cdx.json` when the project defines optional extras. Each states its scope, and tests check what each one holds.
+- The sign-off check no longer lets a commit skip sign-off by claiming Dependabot as its author. Dependabot is exempt only on its own pull requests.
+- The required "All checks passed" check now fails if a CI job is missing, and a skipped title or sign-off check no longer counts as a pass on a pull request.
+- `scripts/check.sh workflows` prints a clear message instead of a stack trace when GitHub rejects the token.
+- `SECURITY.md` no longer says that no release has been published. It says the latest release is supported.
+- The PowerShell syntax check now fails in CI when PowerShell is missing, instead of skipping.
+- On Windows, a closed pipe (reported there as an invalid-argument error rather than a broken pipe) also stops the printing and keeps the real exit code, instead of ending with an internal error or exit 120.
+- `mishpat compare --force` can no longer replace an input with a generated report. A report or manifest file that is one of the inputs (the same path, a symbolic link, or a hard link), or that would be written inside an input folder, now stops the run with exit 3 before anything is read or written, and the input stays unchanged. `mishpat collect --force` likewise refuses an output file that is its `--ca-file` or its `--secret file:` file.
+- The exporter no longer hands its directory search results back as one array inside an array. Every scope of management, link and WMI filter was then recorded as a gap (a conversion error), so a full export of a real domain carried no structure. The search now returns one row per object, and the tests run the script's own search code against a stand-in for Active Directory.
+- A file name, report folder, export path, or error message that contains a line break can no longer add a line to what mishpat prints. Previously a value such as `d\nNo differences found.` put a convincing line of its own under mishpat's output. These values now print on one line, with the line break shown as `\n`.
+
+### Changed
+
+- Reading XML now limits the elements held in memory at once (default 1,000,000, change it with `mishpat compare --max-xml-elements`), and a `<GPOS>` capture of a whole domain is read one GPO at a time instead of being held whole. A small file of empty elements could otherwise need gigabytes. A file over the limit is refused (exit 3). The shared `xmlsafe.py` now matches faithful-shaar's.
+- Reports now show a space that looks like a plain space (a no-break space, for example) as a visible escape, and a plain negative number in the CSV is no longer prefixed with an apostrophe.
+- The summary prints through one place, so every command decides its exit code before it prints.
+- The README leads with an install route that works today (`pipx install git+https://github.com/faithful-oversight/faithful-mishpat`), a status line, how mishpat differs from other tools, and real output from the example.
+- Removed unused code and the unused `moment` argument type.
+- Dependabot groups minor and patch updates of runtime dependencies into one pull request.
+- `CONTRIBUTING.md` lists every tool a clean machine needs and which checks need network access or a token.
+- The releasing guide covers the first PyPI publish, a failed PyPI step, scheduled checks that stop after 60 idle days, both SBOM files, and the pinned tools.
+- CI on a private repository tests Python 3.11 and 3.14 on pull requests and runs macOS only on schedule and before releases, to save metered Actions minutes; a public repository keeps the full matrix.
+
+### Security
+
+- A closed output stream can no longer change the exit code of a run, so a pipeline always sees the real result.
+- A release now stops with a clear message when the `FO_PUBLIC` setting disagrees with whether the repository is public, so a public release cannot skip provenance and PyPI by mistake.
+- Release jobs check the built files against `SHA256SUMS` before attesting, uploading or publishing.
+- uv and the Vale style packages used in CI are pinned to exact versions, and the style packages are checked against a SHA-256 before use.
+- Khmer and Mongolian marks that draw nothing (U+17B4, U+17B5, U+180B to U+180D, U+180F) now print as visible escapes, and an issue reference such as `#123` from the input is no longer turned into a link in the Markdown report.
+- The dependency audit now covers every locked package and version, including Windows-only packages and versions only another Python installs, and fails if the auditor leaves any out. The license check now reads the license of such packages from their exact locked artifact, checked against the sha256 in `uv.lock`, and fails if it cannot, instead of skipping them. The docs theme is limited to Python 3.11.5 and later, so the lock no longer pulls in a `soupsieve` with known advisories.
 
 ## [0.1.0] - 2026-11-11
 

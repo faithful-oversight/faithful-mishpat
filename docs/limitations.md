@@ -11,6 +11,7 @@ The tool will not:
 - Evaluate WMI filters. It compares a filter's name, description, and query text. It does not run the query or say which computers it matches.
 - Evaluate item-level targeting. A Group Policy Preferences item with a filter is compared as written. mishpat does not say whether the item applies to a computer or a user.
 - Expand group membership. Security filtering and delegation are compared as the SIDs and rights on the GPO. The report does not say who a change covers.
+- Read an access entry as Windows does. mishpat compares the named rights, the access mask of an entry that has no named right, the owner, the primary group, and the raw `SDDL` text. It does not decode the text into the rights each entry grants, so a change to an entry flag or to a mask beside named rights shows in the `security descriptor (SDDL)` difference, which is listed for every change to the text, with both texts.
 - Judge whether a change is correct or approved. A difference shows what changed. Whether it should have changed is for you to decide.
 - Compare modified times, version numbers, explanation text, or comments. Saving a GPO without changing a setting shows no difference.
 - Compare the order of Group Policy Preferences items. It does compare the order of the scripts of one type.
@@ -21,6 +22,7 @@ The tool will not:
 mishpat compares what the inputs record. An input that does not record something is not treated as empty. The report lists it under [Not compared](output.md#not-compared).
 
 - **Get-GPOReport files and Backup-GPO folders** do not record link order, blocked inheritance, or the WMI filter query. mishpat compares those only when both inputs are export bundles. [Input formats](formats.md#what-each-input-records) has the full table.
+- **The owner, the group, and the raw descriptor are compared only when the report records them.** mishpat reads the owner and group from the start of the `SDDL` text and from an `Owner` or `Group` element. When one input holds neither, the report lists `GPO owner, group and raw security descriptor` under Not compared. A permission entry with no named right and no readable access mask is a problem, so the comparison is incomplete.
 - **Links come from each GPO's own report.** A report lists the scopes a GPO is linked to. It does not list the other GPOs linked there, so it cannot give order.
 - **Link order is read from the position in `gPLink`**, with the last entry as link order 1. This has not been checked against GPMC on a real directory. See [Input formats](formats.md#structure-line).
 - **Link order is compared by GUID.** With `--match name`, a GPO that has a different GUID on each side is not part of the link order comparison. mishpat still compares its links GPO by GPO. See [Pairing by name](#pairing-by-name).
@@ -39,6 +41,8 @@ mishpat has no knowledge of ADMX files. It identifies an Administrative Template
 - **Make both reports the same way.** Use the same computer, or computers with the same ADMX files and display language, for both reports. The same applies to bundles: the names come from the computer that runs the exporter, which for `mishpat collect` is the controller.
 - **A policy change often shows twice.** A backup holds the policy in `gpreport.xml` and the registry values it sets in `Registry.pol`. Changing one policy changes both, and mishpat reports both, under the areas `Administrative Templates` and `Registry.pol`. See [Registry.pol](#registrypol).
 
+TODO(verify): confirm on a real domain how `Get-GPOReport` writes the security descriptor: that the `SDDL` text holds the owner, the group, and every access entry; whether an `Owner` and a `Group` element are written and in which namespace; and how an access entry with no named right (a granular permission) is written, including whether `AccessMask` is a decimal number. The readers handle the shapes the synthetic fixtures use and treat anything else as a problem or as not compared. They do not guess.
+
 TODO(verify): confirm on a real domain that `Get-GPOReport` writes policy names and categories in the display language of the computer that runs it, and that two ADMX versions can write different text for one policy. mishpat uses the text as written.
 
 ## Generic extensions
@@ -47,6 +51,7 @@ An extension that mishpat has no reader for is compared by its XML. See [Other e
 
 - The value is the element's attributes, text, and children, so the report shows it as a mapping and not as a sentence.
 - An element with no `Name`, `Id`, or `Type`, and with siblings of the same name, is identified by a hash of its content. A change to such an element is a removal and an addition, because the content is its identity.
+- Text that follows a child element is kept as `#tail`, in order, without its position among the children. Inside such an element only `Explain` and `Supported` are left out of the value.
 - Repeated child elements keep their document order, except `Member` elements, which are sorted. A new order of other repeated children is a change.
 
 ## Settings defined twice
@@ -81,7 +86,7 @@ A report names each input by its file or folder name only. When the two inputs h
 
 ## Paths of links
 
-A slash in an organizational unit's name reads the same as a nested unit: `OU=A/B` and `OU=B` inside `OU=A` are both `corp.example/A/B`, as in a `Get-GPOReport` path.
+A slash in an organizational unit's name reads the same as a nested unit: `OU=A/B` and `OU=B` inside `OU=A` are both `corp.example/A/B`, as in a `Get-GPOReport` path. Links are compared by that path, so two scopes in one bundle that read as the same path would hide a change to one of their links. mishpat lists such a bundle as a problem, naming both scopes, so the comparison is incomplete.
 
 A report writes a link target as a path such as `corp.example/Servers`. mishpat writes the target of a link from a bundle in the same form, converted from the distinguished name of the scope. mishpat compares them without regard to case.
 
@@ -98,7 +103,10 @@ mishpat refuses or reports as a problem:
 - A `Get-GPOReport` file larger than 256 MiB.
 - A single file inside a backup larger than 64 MiB.
 - A bundle with more than 100,000 files, or more than 1 GiB of file bytes.
+- A `Registry.pol` file with more than 1,000,000 entries (change it with `--max-pol-entries`): the entries after that are not read, the report lists a problem, and the run exits 1.
+- XML that holds more than 1,000,000 elements in memory at once (change it with `--max-xml-elements`). A `<GPOS>` file is read one GPO at a time, so the limit applies to one GPO. A file over it is refused, and one inside a backup is a problem.
 - XML that nests elements more than 64 levels deep.
+- A backup folder more than four levels below the folder you gave, or one inside any backup that was read, whether that backup is the root or one of several found below it. It is not read, and the report lists it as a problem. If the search below that depth passes 200,000 folders (change it with `--max-scan-folders`), it stops, says so as a problem, and the run exits 1.
 
 ## Exporter and collection
 

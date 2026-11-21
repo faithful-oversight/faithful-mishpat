@@ -13,14 +13,16 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from faithful_mishpat import __version__, example, outputs, pipeline
+from faithful_mishpat import __version__, console, example, outputs, pipeline
+from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import cli as collect_cli
 from faithful_mishpat.collect.secrets import redact
 from faithful_mishpat.compare import MATCHES
 from faithful_mishpat.errors import MishpatError, UsageError
+from faithful_mishpat.formats import backup, registrypol, xmlsafe
 from faithful_mishpat.outputs import render
-from faithful_mishpat.outputs.files import write_files
-from faithful_mishpat.outputs.safety import command_line, terminal
+from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
+from faithful_mishpat.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -95,6 +97,21 @@ def build_parser() -> argparse.ArgumentParser:
             "or never"
         ),
     )
+    diff.add_argument(
+        "--max-pol-entries", type=_count, default=registrypol.MAX_ENTRIES, metavar="N",
+        help=f"most entries read from one Registry.pol (default: {registrypol.MAX_ENTRIES}); "
+        "more is a problem, so the run exits 1",
+    )  # fmt: skip
+    diff.add_argument(
+        "--max-scan-folders", type=_count, default=backup.MAX_SCAN_FOLDERS, metavar="N",
+        help="most folders listed below the search depth to look for backups "
+        f"(default: {backup.MAX_SCAN_FOLDERS}); more is a problem, so the run exits 1",
+    )  # fmt: skip
+    diff.add_argument(
+        "--max-xml-elements", type=_count, default=xmlsafe.MAX_ELEMENTS, metavar="N",
+        help="most XML elements held at once while reading one report "
+        f"(default: {xmlsafe.MAX_ELEMENTS}); more is refused, so the run exits 3",
+    )  # fmt: skip
     diff.add_argument("--force", action="store_true", help="replace existing reports")
     diff.set_defaults(run=_compare)
 
@@ -128,8 +145,26 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(microsecond=0)
 
 
+_count = bounded(1, 1_000_000_000, "a whole number")
+
+
 def _compare(args: argparse.Namespace) -> int:
-    comparison, after, inputs = pipeline.run(args.before, args.after, match=args.match)
+    # Before anything is read or written: a report must never replace or enter an input.
+    refuse_input_overwrite(
+        [args.before, args.after],
+        args.output,
+        [outputs.FILE_NAMES[f] for f in args.format if f in outputs.FILE_NAMES]
+        + [outputs.MANIFEST_NAME],
+    )
+    saved = registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS, xmlsafe.MAX_ELEMENTS
+    registrypol.MAX_ENTRIES = args.max_pol_entries
+    backup.MAX_SCAN_FOLDERS = args.max_scan_folders
+    xmlsafe.MAX_ELEMENTS = args.max_xml_elements
+    try:
+        comparison, after, inputs = pipeline.run(args.before, args.after, match=args.match)
+    finally:
+        registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS, xmlsafe.MAX_ELEMENTS = saved
+
     document = outputs.build_report(
         comparison,
         [vars(item) for item in inputs],
@@ -139,17 +174,20 @@ def _compare(args: argparse.Namespace) -> int:
         after=after,
     )
     written = outputs.write_reports(document, args.output, args.format, force=args.force)
-    print(render.terminal_summary(document))  # noqa: T201
-    print(terminal(f"Reports written to {args.output}: {', '.join(p.name for p in written)}"))  # noqa: T201
-    if args.fail_on == "never":
-        return int(ExitCode.OK)
-    failed = not comparison.complete or (args.fail_on == "differences" and comparison.differences)
+    # The exit code is decided before anything is printed, so a summary that cannot be
+    # printed (a closed pipe, a path the terminal cannot show) never changes it.
+    failed = args.fail_on != "never" and (
+        not comparison.complete or (args.fail_on == "differences" and comparison.differences)
+    )
+    console.say(render.terminal_summary(document))
+    names = ", ".join(terminal_line(p.name) for p in written)
+    console.say(f"Reports written to {terminal_line(str(args.output))}: {names}")
     return int(ExitCode.FINDINGS if failed else ExitCode.OK)
 
 
 def _schema(args: argparse.Namespace) -> int:
     name = f"schema/{SCHEMAS[args.name]}.schema.json"
-    sys.stdout.write(files("faithful_mishpat").joinpath(name).read_text(encoding="utf-8"))
+    console.say(files("faithful_mishpat").joinpath(name).read_text(encoding="utf-8"), end="")
     return int(ExitCode.OK)
 
 
@@ -160,12 +198,22 @@ def _example(args: argparse.Namespace) -> int:
     command = command_line(
         "mishpat", "compare", str(before), str(after), "-o", str(args.directory / "report")
     )
-    print(terminal(f"Wrote a synthetic before and after to {args.directory}. Try:\n  {command}"))  # noqa: T201
+    console.say(
+        f"Wrote a synthetic before and after to {terminal_line(str(args.directory))}. Try:\n"
+        f"  {terminal_line(command)}"
+    )
     return int(ExitCode.OK)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line and return an exit code."""
+    console.prepare()
+    code = _run(argv)
+    console.finish()
+    return code
+
+
+def _run(argv: Sequence[str] | None) -> int:
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
@@ -178,12 +226,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return int(args.run(args))
     except MishpatError as exc:
-        print(f"mishpat: error: {terminal(redact(str(exc)))}", file=sys.stderr)  # noqa: T201
+        console.say(f"mishpat: error: {terminal_line(redact(str(exc)))}", err=True)
         return int(ExitCode.USAGE if isinstance(exc, UsageError) else ExitCode.INPUT_ERROR)
     except Exception as exc:  # noqa: BLE001 - last-resort handler keeps crashes distinct
-        print(  # noqa: T201
-            f"mishpat: internal error: {type(exc).__name__}: {terminal(redact(str(exc)))[:200]}\n"
+        shown = terminal_line(redact(str(exc)))[:200]
+        console.say(
+            f"mishpat: internal error: {type(exc).__name__}: {shown}\n"
             "This is a bug in mishpat. Please report it.",
-            file=sys.stderr,
+            err=True,
         )
         return int(ExitCode.INTERNAL_ERROR)

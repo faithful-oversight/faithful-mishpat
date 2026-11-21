@@ -79,10 +79,14 @@ For each GPO, mishpat reads:
 - Whether the computer half and the user half are enabled.
 - The WMI filter name and description. A report with `FilterDataAvailable` set to `false` is recorded as unknown, not as having no filter.
 - The links (`LinksTo`): the scope path, enabled, and enforced (`NoOverride`). A report that lists no link gives an empty list of links.
-- The security descriptor: each trustee with its SID, name, allow or deny, and rights. A report without `PermissionsPresent` set to `true` gives no permissions, which is recorded as not recorded.
+- The security descriptor:
+  - Each trustee with its SID, name, allow or deny, and rights. A report without `PermissionsPresent` set to `true` gives no permissions, which is recorded as not recorded.
+  - For a trustee with no named right (a custom permission), the `AccessMask`, when it is a whole decimal number. A trustee with no named right and no such mask is a problem, so the entry is never passed over as if it granted nothing.
+  - The owner and the primary group. mishpat takes them from the `O:` and `G:` parts at the start of the `SDDL` text, and from an `Owner` or `Group` element when the descriptor holds one. A `SDDL` text that does not start with those parts in the documented SDDL form is a problem.
+  - The `SDDL` text itself, which holds every access entry in raw form, including flags and inheritance.
 - The settings of every extension, as [Settings](#settings) describes.
 
-mishpat reads the created and modified times, the version numbers, and the explanation and comment text, but it never compares them and the report does not show them. `ReadTime`, `Blocked`, `GPOSettingOrder`, `Explain`, and `Supported` are always left out of values.
+mishpat reads the created and modified times, the version numbers, and the explanation and comment text, but it never compares them and the report does not show them. `ReadTime`, `Blocked`, `GPOSettingOrder`, `Explain`, and `Supported` are left out of values where they are direct children of `Extension`, and `Explain` and `Supported` also inside a policy and inside an extension mishpat has no reader for. In an extension mishpat has no reader for, any other nested element, even one called `Blocked`, is compared, because it may be a real setting. Text that follows a child element (mixed content) is part of the value, as `#tail`.
 
 ### Limits
 
@@ -115,7 +119,7 @@ The output of `Backup-GPO`. Each backup is a folder named by a backup ID (a GUID
   DomainSysvol/GPO/User/registry.pol
 ```
 
-Give mishpat either one backup folder, or a root folder that holds many. A root is any folder that is not itself a backup folder. mishpat searches up to four levels below it for folders that hold `bkupInfo.xml`, and reads each as one GPO. The `manifest.xml` that `Backup-GPO` writes beside the backups is not read.
+Give mishpat either one backup folder, or a root folder that holds many. A root is any folder that is not itself a backup folder. mishpat searches up to four levels below it for folders that hold `bkupInfo.xml`, and reads each as one GPO. Below that depth it lists folders only to look for a `bkupInfo.xml`, up to 200,000 folders (`--max-scan-folders` changes this). A backup it finds there, or inside any backup folder it reads (the root itself or one of the backups found below it), is not read and is listed as a problem, so the report does not claim the input was read in full. The `manifest.xml` that `Backup-GPO` writes beside the backups is not read.
 
 ```powershell
 Backup-GPO -All -Path .\before
@@ -286,6 +290,8 @@ mishpat reads the `gPLink` attribute with the syntax [MS-GPOL] defines. Each lin
 The last entry in the string is taken to have link order 1, the highest precedence. [MS-GPOL] defines the list and its syntax but not, in words this release could rely on, how a position maps to the link order GPMC shows, and Microsoft's prose example is not consistent with its own explanation. The reading follows how GPMC writes the attribute: a new link is added at the start of the string and gets the highest link order number. <!-- TODO(verify): in a lab, link three GPOs to one OU, compare the raw gPLink with GPMC and Get-GPInheritance, then reorder, insert, disable and enforce links and check again. --> It has not been checked against a real directory in this release, so treat a reported link-order change as something to confirm in GPMC. The bundle keeps the raw `gPLink`, so a correction needs no new export. mishpat gives each link its order from that, and takes enabled and enforced from the directory. It adds a link that the directory lists and the GPO's report does not. It writes each link target in the form a report uses, such as `corp.example/Servers`, so a bundle and a report file compare. A site is written as its name.
 
 Each `gaps` entry becomes a problem, `WHAT was not read: REASON`, and the comparison is incomplete.
+
+Two scopes whose distinguished names read as the same path, such as `OU=B` inside `OU=A` and a top-level `OU=A\/B`, are a problem: links are compared by path, so a change to a link of either could not be told apart. The comparison is incomplete.
 
 A bundle with no structure line is accepted, and then it records no link order and no blocked inheritance. The exporter always writes a structure line.
 

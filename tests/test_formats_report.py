@@ -124,12 +124,17 @@ def test_trustees() -> None:
             "NT AUTHORITY\\Authenticated Users",
             allow=True,
             rights=("Apply Group Policy",),
+            access_mask=0,
         ),
         Trustee(
-            f"{fx.DOMAIN_SID}-512", "CORP\\Domain Admins", allow=True, rights=("Edit settings",)
+            f"{fx.DOMAIN_SID}-512",
+            "CORP\\Domain Admins",
+            allow=True,
+            rights=("Edit settings",),
+            access_mask=0,
         ),
-        Trustee("S-1-1-0", "Everyone", allow=False, rights=("Apply Group Policy",)),
-        Trustee("S-1-5-18", "NT AUTHORITY\\SYSTEM", allow=True, rights=("Read",)),
+        Trustee("S-1-1-0", "Everyone", allow=False, rights=("Apply Group Policy",), access_mask=0),
+        Trustee("S-1-5-18", "NT AUTHORITY\\SYSTEM", allow=True, rights=("Read",), access_mask=0),
     ]
     assert gpo.trustees[0].applies
     assert not gpo.trustees[2].applies
@@ -149,8 +154,11 @@ def test_trustee_rights_are_sorted_unique_and_a_name_stands_in_for_a_missing_sid
 
 
 def test_trustee_without_trustee_or_rights_element() -> None:
-    (trustee,) = one(trustees="<q2:TrusteePermissions/>").trustees or []
+    result = read(fx.gpo_xml(trustees="<q2:TrusteePermissions/>"))
+    (trustee,) = result.gpos[0].trustees or []
     assert trustee == Trustee("", "", allow=False, rights=())
+    (problem,) = result.problems  # nothing to compare, so the entry is said to be unread
+    assert "unnamed trustee" in problem.reason
 
 
 def test_trustees_are_none_when_not_exported() -> None:
@@ -1137,3 +1145,172 @@ def test_canonical_helper() -> None:
     assert cast("dict[str, Any]", canonical(root, drop=frozenset({"x"}), sort=frozenset({"c"})))[
         "c"
     ] == ["", "2"]
+
+
+# --- security descriptor: owner, group, raw SDDL and custom permissions (MISHPAT-C01) ----
+
+OWNER_ELEMENT = (
+    f'<Owner xmlns="{fx.SECURITY_TYPES}"><SID xmlns="{TYPES}">S-1-5-21-1000-2000-3000-1999</SID>'
+    f'<Name xmlns="{TYPES}">CORP\\owner</Name></Owner>'
+)
+
+
+def test_owner_and_group_come_from_the_sddl_text() -> None:
+    gpo = one(sddl="O:DAG:S-1-5-21-1000-2000-3000-513D:PAI(A;;GA;;;DA)")
+    assert (gpo.owner, gpo.group) == ("DA", "S-1-5-21-1000-2000-3000-513")
+    assert gpo.sddl == "O:DAG:S-1-5-21-1000-2000-3000-513D:PAI(A;;GA;;;DA)"
+
+
+def test_an_sddl_without_an_owner_has_no_owner_and_no_problem() -> None:
+    gpo = one(sddl="D:PAI(A;;GA;;;DA)")
+    assert (gpo.owner, gpo.group) == (None, None)
+    assert gpo.sddl == "D:PAI(A;;GA;;;DA)"
+
+
+def test_no_sddl_means_nothing_recorded() -> None:
+    gpo = one(sddl=None)
+    assert (gpo.sddl, gpo.owner, gpo.group) == (None, None, None)
+
+
+def test_an_sddl_that_does_not_start_as_expected_is_a_problem() -> None:
+    result = read(fx.gpo_xml(sddl="owner is Domain Admins"))
+    (problem,) = result.problems
+    assert "SecurityDescriptor/SDDL" in str(problem.source)
+    assert "not compared" in problem.reason or "were not compared" in problem.reason
+    assert result.gpos[0].owner is None
+    assert result.gpos[0].sddl == "owner is Domain Admins"  # the text is still compared
+
+
+def test_an_owner_element_gives_the_owner_and_its_name() -> None:
+    gpo = one(owner=OWNER_ELEMENT)
+    assert (gpo.owner, gpo.owner_name) == ("S-1-5-21-1000-2000-3000-1999", "CORP\\owner")
+
+
+def test_an_owner_element_with_no_sid_or_name_is_a_problem() -> None:
+    empty = f'<Owner xmlns="{fx.SECURITY_TYPES}"/>'
+    result = read(fx.gpo_xml(owner=empty))
+    (problem,) = result.problems
+    assert "Owner element" in problem.reason
+    assert result.gpos[0].owner == "DA"  # the SDDL still gives one
+
+
+def test_a_permission_with_no_named_right_keeps_its_access_mask() -> None:
+    entry = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\x", "", mask=131072)
+    (trustee,) = one(trustees=entry).trustees or []
+    assert trustee.rights == ()
+    assert trustee.access_mask == 131072
+
+
+@pytest.mark.parametrize("mask", ["", "abc", "0x20000", "-1", "99999999999", "1.5"])
+def test_a_permission_with_no_named_right_and_no_usable_mask_is_a_problem(mask: str) -> None:
+    entry = fx.trustee("S-1-5-21-1000-2000-3000-1500", "CORP\\x", "", mask=mask)
+    result = read(fx.gpo_xml(trustees=entry))
+    (problem,) = result.problems
+    assert "TrusteePermissions[1]" in str(problem.source)
+    assert "not compared" in problem.reason
+    assert result.gpos[0].trustees is not None
+
+
+# --- oversized and non-ASCII numbers (MISHPAT-C03) ----------------------------------------
+
+HUGE = "9" * 5000
+
+
+def registry_setting(number: str) -> str:
+    return fx.registry_ext(
+        f"<q1:RegistrySetting><q1:KeyPath>HKLM\\Software\\X</q1:KeyPath>"
+        f"<q1:Value><q1:Name>V</q1:Name><q1:Number>{number}</q1:Number></q1:Value>"
+        "</q1:RegistrySetting>"
+    )
+
+
+def test_a_number_of_thousands_of_digits_stays_text_and_is_not_a_crash() -> None:
+    gpo = one(computer=registry_setting(HUGE))
+    assert only(gpo).value == {"value": HUGE}
+
+
+def test_a_number_of_twenty_digits_is_still_a_number() -> None:
+    gpo = one(computer=registry_setting("18446744073709551615"))
+    assert only(gpo).value == {"value": 18446744073709551615}
+    assert one(computer=registry_setting("-1")).settings[0].value == {"value": -1}
+
+
+def test_digits_of_other_scripts_are_not_numbers() -> None:
+    assert only(one(computer=registry_setting("٣"))).value == {"value": "٣"}
+
+
+@pytest.mark.parametrize("scalar_text", [HUGE, "-" + HUGE, "1" * 21])
+def test_every_reader_that_converts_numbers_survives_a_long_one(scalar_text: str) -> None:
+    ext = fx.security_ext(
+        "<q1:SecurityOptions><q1:KeyName>MACHINE\\X</q1:KeyName>"
+        f"<q1:SettingNumber>{scalar_text}</q1:SettingNumber>"
+        "<q1:Display><q1:Name>Setting X</q1:Name></q1:Display></q1:SecurityOptions>"
+        f"<q1:Account><q1:Name>MinimumPasswordLength</q1:Name><q1:SettingNumber>{scalar_text}</q1:SettingNumber>"
+        "<q1:Type>Password</q1:Type></q1:Account>"
+    )
+    result = read(fx.gpo_xml(computer=ext))
+    assert result.gpos  # read, not an internal error
+
+
+def test_a_version_of_thousands_of_digits_is_a_problem_not_a_crash() -> None:
+    result = read(fx.gpo_xml(versions=(HUGE, "3", "1", "1")))
+    assert result.gpos
+    assert any(
+        "VersionDirectory" in p.reason and "not a number" in p.reason for p in result.problems
+    )
+    assert "computer directory" not in result.gpos[0].versions
+
+
+# --- mixed content and ignored names inside unknown extensions (MISHPAT-C09) ---------------
+
+
+def generic(body: str) -> Any:
+    ext = fx.extension("Vendor/Thing", body.replace("<z:", "<q1:").replace("</z:", "</q1:"))
+    return only(one(computer=ext)).value
+
+
+def test_text_after_a_child_element_is_part_of_the_value() -> None:
+    allow = generic("<z:Thing><z:Name>n</z:Name>allow</z:Thing>")
+    deny = generic("<z:Thing><z:Name>n</z:Name>deny</z:Thing>")
+    assert allow != deny
+    assert allow["#tail"] == "allow"
+
+
+def test_indentation_between_children_is_not_a_tail() -> None:
+    value = generic("<z:Thing>\n  <z:A>1</z:A>\n  <z:B>2</z:B>\n</z:Thing>")
+    assert "#tail" not in value
+
+
+def test_a_setting_called_blocked_in_an_unknown_extension_is_compared() -> None:
+    on = generic("<z:Thing><z:Blocked>true</z:Blocked><z:A>1</z:A></z:Thing>")
+    off = generic("<z:Thing><z:Blocked>false</z:Blocked><z:A>1</z:A></z:Thing>")
+    assert on != off
+    assert on["Blocked"] == "true"
+
+
+def test_extension_level_read_time_is_still_left_out() -> None:
+    ext = fx.extension(
+        "Vendor/Thing", "<q1:ReadTime>now</q1:ReadTime><q1:Thing><q1:A>1</q1:A></q1:Thing>"
+    )
+    assert len(one(computer=ext).settings) == 1
+
+
+# --- a <GPOS> file is read one GPO at a time ---------------------------------------------
+
+
+def test_a_gpos_file_is_not_held_whole(monkeypatch: pytest.MonkeyPatch) -> None:
+    gpos = [fx.gpo_xml(f"{n:08x}-aaaa-4aaa-8aaa-000000000001", f"G{n}") for n in range(40)]
+    data = fx.report_bytes(*gpos, wrapped=True)
+    whole = read_report(data, Source("r.xml"))
+    monkeypatch.setattr(xmlsafe, "MAX_ELEMENTS", 400)  # one GPO fits, forty do not
+    streamed = read_report(data, Source("r.xml"))
+    assert [g.guid for g in streamed.gpos] == [g.guid for g in whole.gpos]
+    assert len(streamed.gpos) == 40
+
+
+def test_a_gpo_over_the_element_limit_is_refused_naming_the_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(xmlsafe, "MAX_ELEMENTS", 10)
+    with pytest.raises(InputError, match=r"r\.xml is not a Get-GPOReport XML file: .*10 elements"):
+        read_report(fx.report_bytes(fx.gpo_xml()), Source("r.xml"))

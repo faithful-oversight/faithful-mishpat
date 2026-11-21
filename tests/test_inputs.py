@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -89,7 +91,9 @@ def test_report_problems_are_kept(tmp_path: Path) -> None:
 def test_other_files_are_input_errors(tmp_path: Path, data: bytes) -> None:
     path = tmp_path / "x.xml"
     path.write_bytes(data)
-    with pytest.raises(InputError, match=r"^x\.xml is not a Get-GPOReport XML file: "):
+    with pytest.raises(
+        InputError, match=f"^{re.escape(str(path))} is not a Get-GPOReport XML file: "
+    ):
         read_side(path, "before")
 
 
@@ -113,12 +117,15 @@ def test_an_unreadable_file_is_an_input_error(
         raise PermissionError(13, "Permission denied")
 
     monkeypatch.setattr(Path, "open", refuse)
-    with pytest.raises(InputError, match=r"^cannot read x\.xml: Permission denied"):
+    with pytest.raises(InputError, match=f"^cannot read {re.escape(str(path))}: Permission denied"):
         read_side(path, "before")
 
 
 def test_a_missing_path_is_an_input_error(tmp_path: Path) -> None:
-    with pytest.raises(InputError, match=r"^nope does not exist or is neither a file nor a folder"):
+    pattern = (
+        f"^{re.escape(str(tmp_path / 'nope'))} does not exist or is neither a file nor a folder"
+    )
+    with pytest.raises(InputError, match=pattern):
         read_side(tmp_path / "nope", "before")
 
 
@@ -167,11 +174,13 @@ def test_current_directory_is_named_by_its_real_name(
 def test_a_folder_that_is_not_a_backup_is_an_input_error(tmp_path: Path) -> None:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "readme.txt").write_text("hi", "utf-8")
-    with pytest.raises(InputError, match=r"^docs is not a Backup-GPO folder"):
+    with pytest.raises(
+        InputError, match=f"^{re.escape(str(tmp_path / 'docs'))} is not a Backup-GPO folder"
+    ):
         read_side(tmp_path / "docs", "before")
     empty = tmp_path / "empty"
     empty.mkdir()
-    with pytest.raises(InputError, match=r"^empty is not a Backup-GPO folder"):
+    with pytest.raises(InputError, match=f"^{re.escape(str(empty))} is not a Backup-GPO folder"):
         read_side(empty, "before")
 
 
@@ -267,4 +276,29 @@ def test_the_name_of_an_input_with_odd_bytes_is_what_sources_show(tmp_path: Path
 
 
 def test_module_exports() -> None:
-    assert inputs.__all__ == ["display_name", "read_side"]
+    assert inputs.__all__ == ["display_name", "read_side", "shown_path"]
+
+
+# --- a bundle saved with a byte order mark or as UTF-16 (MISHPAT-C12) ---------------------
+
+
+@pytest.mark.parametrize(
+    "encode",
+    [
+        lambda text: b"\xef\xbb\xbf" + text.encode("utf-8"),
+        lambda text: b"\xff\xfe" + text.encode("utf-16-le"),
+        lambda text: b"\xfe\xff" + text.encode("utf-16-be"),
+    ],
+)
+def test_a_misencoded_bundle_is_named_as_one(tmp_path: Path, encode: Any) -> None:
+    text = '{"mishpat_export":1,"collector":{"name":"x","version":"1"}}\n'
+    path = tmp_path / "export.jsonl"
+    path.write_bytes(encode(text))
+    with pytest.raises(InputError, match="looks like a mishpat export bundle"):
+        read_side(path, "before")
+
+
+def test_a_report_with_a_byte_order_mark_is_still_read(tmp_path: Path) -> None:
+    path = tmp_path / "r.xml"
+    path.write_bytes(report_bytes(gpo(GUID_A, "A"), how="utf8-bom"))
+    assert read_side(path, "before").gpos

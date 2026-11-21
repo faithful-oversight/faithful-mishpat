@@ -34,6 +34,15 @@ def display_name(path: Path) -> str:
     return os.fsencode(name).decode("utf-8", "backslashreplace")
 
 
+def shown_path(path: Path) -> str:
+    """Return the path as the user gave it, made safe to show (non-UTF-8 bytes are escaped).
+
+    Error messages name this, so a reader at a terminal can find the file. Reports cite only
+    :func:`display_name`, so a report never holds the folders an input was in.
+    """
+    return os.fsencode(path).decode("utf-8", "backslashreplace")
+
+
 def _read_file(path: Path, name: str) -> Snapshot:
     try:
         with path.open("rb") as handle:
@@ -45,6 +54,13 @@ def _read_file(path: Path, name: str) -> Snapshot:
         raise InputError(msg) from None
     if is_bundle:
         return _bundle(path, name)
+    if bundle.is_misencoded_bundle(start):
+        msg = (
+            f"{name} looks like a mishpat export bundle that was saved with a byte order mark "
+            "or as UTF-16, which mishpat does not read; export it again, or save it as plain "
+            "UTF-8 without a byte order mark"
+        )
+        raise InputError(msg)
     result = report.read_report(data, Source(name))
     return Snapshot(
         label="",
@@ -99,15 +115,20 @@ def read_side(path: Path, label: str, name: str | None = None) -> Snapshot:
             ambiguous (two backups of one GPO).
     """
     name = name or display_name(path)
-    if path.is_dir():
-        snapshot = _read_folder(path, name)
-    elif path.is_file():
-        snapshot = _read_file(path, name)
-    else:
-        msg = f"{name} does not exist or is neither a file nor a folder"
-        raise InputError(msg)
+    try:
+        if path.is_dir():
+            snapshot = _read_folder(path, name)
+        elif path.is_file():
+            snapshot = _read_file(path, name)
+        else:
+            msg = f"{name} does not exist or is neither a file nor a folder"
+            raise InputError(msg)  # noqa: TRY301 - named with its path just below
+    except InputError as exc:
+        # The readers name an input by the name reports cite; the person at the terminal
+        # needs the path they typed.
+        raise InputError(str(exc).replace(name, shown_path(path), 1)) from None
     snapshot.label = label
     return snapshot
 
 
-__all__ = ["display_name", "read_side"]
+__all__ = ["display_name", "read_side", "shown_path"]

@@ -10,11 +10,12 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from faithful_mishpat import console
 from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import names, remote, script, secrets
 from faithful_mishpat.errors import UsageError
-from faithful_mishpat.outputs.files import write_files
-from faithful_mishpat.outputs.safety import command_line, terminal
+from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
+from faithful_mishpat.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     from typing import Any
@@ -104,6 +105,12 @@ def run_collect(args: argparse.Namespace) -> int:
     if username and not args.secret:
         msg = "--username needs --secret; leave both out to use the current Kerberos ticket"
         raise UsageError(msg)
+    # Before any secret is read: a collection must never replace a file it was told to use.
+    provider, _, location = (args.secret or "").partition(":")
+    uses = [args.ca_file] if args.ca_file else []
+    if provider == "file" and location:
+        uses.append(Path(location))
+    refuse_input_overwrite(uses, args.output.parent, [args.output.name])
     target = remote.Target(
         server=server,
         auth=args.auth,
@@ -119,11 +126,14 @@ def run_collect(args: argparse.Namespace) -> int:
         target = remote.Target(**{**vars(target), "secret": secrets.resolve(args.secret)})
     values = remote.parameters(names=args.name, guids=args.guid, every_gpo=args.all, server=server)
     result = remote.collect(target, script.text(), values, args.output, force=args.force)
-    print(terminal(f"Exported {result.files} files from {server} into {result.path}."))  # noqa: T201
+    console.say(
+        f"Exported {result.files} files from {terminal_line(server)} "
+        f"into {terminal_line(str(result.path))}."
+    )
     for gap in result.gaps:
-        print(terminal(f"  not read: {gap}"))  # noqa: T201
+        console.say(f"  not read: {terminal_line(gap)}")
     command = command_line("mishpat", "compare", str(result.path), "AFTER", "-o", "report")
-    print(terminal(f"Compare it with a later export using: {command}"))  # noqa: T201
+    console.say(f"Compare it with a later export using: {terminal_line(command)}")
     return 0
 
 
@@ -132,6 +142,6 @@ def run_exporter(args: argparse.Namespace) -> int:
     path: Path = args.output
     written = write_files(path.parent, {path.name: script.text()}, force=args.force)
     command = f".\\{script.NAME} -All -OutFile corp-gpos.jsonl"
-    print(terminal(f"Wrote {written[0]}. On a domain controller, in PowerShell:"))  # noqa: T201
-    print(terminal(f"  {command}"))  # noqa: T201
+    console.say(f"Wrote {terminal_line(str(written[0]))}. On a domain controller, in PowerShell:")
+    console.say(f"  {command}")
     return 0

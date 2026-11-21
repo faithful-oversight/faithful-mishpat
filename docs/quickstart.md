@@ -4,16 +4,15 @@ This walk-through takes about ten minutes. It starts with synthetic data, so not
 
 ## 1. Install
 
+PyPI publishing is being set up. Until a PyPI release exists, install from GitHub:
+
 ```shell
-pipx install faithful-mishpat
+pipx install git+https://github.com/faithful-oversight/faithful-mishpat
+pipx ensurepath
 mishpat --version
 ```
 
-Until the first release is on PyPI, install the wheel attached to a [GitHub release](https://github.com/faithful-oversight/faithful-mishpat/releases) instead:
-
-```shell
-pipx install ./faithful_mishpat-0.1.0-py3-none-any.whl
-```
+For a fixed version, add the tag: `...faithful-mishpat@v0.1.1`. `pipx ensurepath` puts the `mishpat` command on your PATH; open a new terminal afterwards if `mishpat` is not found.
 
 mishpat runs on Windows, macOS, and Linux with Python 3.11 or newer. Reading files needs nothing else. Remote collection needs an extra, which [Collecting exports](collecting.md#remote-collection) explains.
 
@@ -41,7 +40,7 @@ mishpat compare ./mishpat-demo/corp-before.jsonl ./mishpat-demo/corp-after.jsonl
 The terminal shows a summary, then the files it wrote:
 
 ```text
-mishpat 0.1.0
+mishpat 0.1.1
 27 differences across 5 GPOs and the domain's structure. Every input was read in full.
   GPO: 3
   Status: 1
@@ -51,7 +50,7 @@ mishpat 0.1.0
   Links: 4
   Inheritance: 1
   Settings: 15
-Reports written to ./mishpat-demo/report: mishpat-report.json, mishpat-report.md, mishpat-report.html, mishpat-differences.csv, mishpat-manifest.json
+Reports written to mishpat-demo/report: mishpat-report.json, mishpat-report.md, mishpat-report.html, mishpat-differences.csv, mishpat-manifest.json
 ```
 
 mishpat exits with code `1` because there are differences. That is the expected result here. Add `--fail-on never` to see exit code `0`. The same reports are committed in [examples/corp-example](https://github.com/faithful-oversight/faithful-mishpat/tree/main/examples/corp-example).
@@ -117,7 +116,7 @@ mishpat compare corp-before.jsonl corp-after.jsonl -o report
 `mishpat collect` runs the same script on a domain controller over PowerShell remoting (WinRM), so you install nothing on it. It needs the `live` extra:
 
 ```shell
-pipx install "faithful-mishpat[live]"
+pipx install "faithful-mishpat[live] @ git+https://github.com/faithful-oversight/faithful-mishpat"
 export MISHPAT_PASSWORD='...'
 mishpat collect --server dc01.corp.example --all --auth ntlm --username 'CORP\auditor' \
   --secret env:MISHPAT_PASSWORD --ca-file corp-root-ca.pem -o corp-before.jsonl

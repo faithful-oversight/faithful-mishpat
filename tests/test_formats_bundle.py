@@ -656,6 +656,29 @@ def test_a_repeated_scope_is_skipped(tmp_path: Path) -> None:
     assert len(result.scopes) == 1
 
 
+def test_two_scopes_written_as_the_same_path_are_a_problem(tmp_path: Path) -> None:
+    # OU=B inside OU=A, and a top-level OU named "A/B", are both corp.example/A/B.
+    scopes = [
+        scope_entry("OU=B,OU=A,DC=corp,DC=example", link=gplink((GUID_A, 0))),
+        scope_entry("OU=A\\/B,DC=corp,DC=example", link=gplink((GUID_A, 1))),
+    ]
+    result = read(tmp_path, bundle_bytes(backup_files(report=None), struct_=structure(scopes)))
+    reasons = [r for r in problems_of(result) if "cannot be told apart" in r]
+    assert len(reasons) == 1
+    assert "corp.example/A/B" in reasons[0]
+    source = next(p.source for p in result.problems if "cannot be told apart" in p.reason)
+    assert source == Source("export.jsonl", "structure scope 2")
+
+
+def test_scopes_with_different_paths_are_not_a_problem(tmp_path: Path) -> None:
+    scopes = [
+        scope_entry("OU=B,OU=A,DC=corp,DC=example", link=gplink((GUID_A, 0))),
+        scope_entry("OU=B,DC=corp,DC=example", link=gplink((GUID_A, 1))),
+    ]
+    result = read(tmp_path, bundle_bytes(backup_files(report=None), struct_=structure(scopes)))
+    assert not any("cannot be told apart" in r for r in problems_of(result))
+
+
 def test_a_malformed_gplink_keeps_the_scope_without_links(tmp_path: Path) -> None:
     value = structure([scope_entry("OU=A,DC=corp,DC=example", link="[LDAP://cn=oops;0]")])
     result = read(tmp_path, rebuild([head(), structure_line(value)]))

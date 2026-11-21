@@ -11,6 +11,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from faithful_mishpat.formats import registrypol
 from faithful_mishpat.formats.registrypol import PolRead, read_registry_pol
 from faithful_mishpat.model import Source
 from tests.fixtures_gpo import Entry, dword, multi_sz, qword, registry_pol, sz
@@ -117,6 +118,25 @@ def test_a_truncated_entry_keeps_the_entries_before_it() -> None:
         assert not result.ok
         assert [s.key[1] for s in result.settings] == ["A"]
         assert "entry 2 is damaged" in result.problems[0].reason
+
+
+def test_a_file_with_more_entries_than_the_limit_is_read_up_to_it_and_says_so(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(registrypol, "MAX_ENTRIES", 3)
+    result = read([(KEY, f"V{n}", 4, dword(n)) for n in range(5)])
+    assert not result.ok
+    assert [s.key[1] for s in result.settings] == ["V0", "V1", "V2"]
+    (problem,) = result.problems
+    assert "more than 3 entries" in problem.reason
+    assert "after the first 3 were not read" in problem.reason
+
+
+def test_a_file_with_exactly_the_limit_is_read_in_full(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(registrypol, "MAX_ENTRIES", 3)
+    result = read([(KEY, f"V{n}", 4, dword(n)) for n in range(3)])
+    assert result.ok
+    assert len(result.settings) == 3
 
 
 def test_every_truncation_point_is_a_problem_not_a_crash() -> None:

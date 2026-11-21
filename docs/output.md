@@ -107,7 +107,7 @@ Each difference has a category, a kind, the GPO it concerns, a subject, the valu
 | `labels` | Words that a reader shows beside a value, keyed by the value as text: the name of an account beside its SID, or the meaning of a security option beside its number. mishpat never compares them. An empty object when there are none. |
 | `sources` | Where each side was read, before first. A file inside a bundle is written `bundle.jsonl:path/inside`. When only one side is listed, it is the side that holds the item. |
 
-In Markdown and HTML, a value that is not set shows as `(not set)`. Text with spaces at its edges is shown in quotes. In Markdown, an invisible word joiner (U+2060) follows each `@`, `://` and `www.` so that a viewer does not turn text such as `@action`, an address or an email address into a link or a mention; text copied from the Markdown report holds it. The JSON report does not. A value that has a label shows it in brackets after the value. When both sides are mappings, only the keys that differ are shown. Then, a list shows as its items joined by commas, and a mapping shows as `name: value` pairs joined by semicolons. The CSV report writes lists and mappings as JSON. The JSON report keeps the exact values.
+In Markdown and HTML, a value that is not set shows as `(not set)`. When two values read the same and differ only in kind, such as the text `"5"` and the number `5` (a registry value that changed from `REG_SZ` to `REG_DWORD`), both are shown with the kind in brackets: `"5" (text)` and `5 (number)`. The CSV does the same for a plain value; it keeps lists and mappings as JSON, which already tells the two apart. Text with spaces at its edges is shown in quotes. In Markdown, an invisible word joiner (U+2060) follows each `@`, `://` and `www.` so that a viewer does not turn text such as `@action`, an address or an email address into a link or a mention; text copied from the Markdown report holds it. The JSON report does not. A value that has a label shows it in brackets after the value. When both sides are mappings, only the keys that differ are shown. Then, a list shows as its items joined by commas, and a mapping shows as `name: value` pairs joined by semicolons. The CSV report writes lists and mappings as JSON. The JSON report keeps the exact values.
 
 Differences are in the order of the GPO's name, then the order of the categories, with scope differences last.
 
@@ -119,7 +119,7 @@ Differences are in the order of the GPO's name, then the order of the categories
 | `status` | The computer half or user half turned on or off | `changed` | `computer half` or `user half`, then `enabled` or `disabled`. |
 | `wmi-filter` | The WMI filter of a GPO | `added`, `removed`, `changed` | `WMI filter`, then `null` or the name, description, and query. |
 | `security-filtering` | A trustee that is allowed to apply the GPO | `added`, `removed` | The trustee's name and SID, then `applies` or `null`. |
-| `permissions` | Every other permission entry on the GPO, which is delegation | `added`, `removed`, `changed` | The trustee, then the sorted rights. |
+| `permissions` | Every other permission entry on the GPO, which is delegation, and the GPO's owner, primary group, and raw security descriptor | `added`, `removed`, `changed` | The trustee, then the sorted rights. For the owner or group, the subject is `owner` or `group`, then the SID or alias. For the raw descriptor, the subject is `security descriptor (SDDL)`, then both texts. |
 | `link` | A link of a GPO, or the order of the links on a scope | `added`, `removed`, `changed` | The link target, then `enabled` and `enforced`. For order, the scope, then the GPO names in order. |
 | `inheritance` | A scope that starts or stops blocking inheritance, or one that blocks it and is in one input only | `changed`, `added`, `removed`, `only-before`, `only-after` | The scope's path, then `blocked` or `not blocked`. |
 | `setting` | A setting in a GPO | `added`, `removed`, `changed` | The setting's title, then its value. |
@@ -151,6 +151,10 @@ An added or removed GPO is one difference. mishpat does not list its settings on
 
 **Permissions.** Every other permission entry is delegation. mishpat compares them by SID and by allow or deny. The value is the sorted list of rights. An entry that gains or loses a right is `changed`. A deny entry has the note `deny`. A deny entry for Apply Group Policy is listed here, not under security filtering, because only allow entries filter.
 
+An entry with no named right is a custom permission. mishpat compares it by its access mask and writes it as `custom access mask 0x00020000`. An entry with no named right and an access mask of zero grants nothing and is not listed.
+
+mishpat also compares the GPO's owner and its primary group, and lists a change as `changed` with the subject `owner` or `group`. Whenever the raw `SDDL` text differs, mishpat also lists one difference with the subject `security descriptor (SDDL)` and both texts, beside any named difference, so a change to entry flags or to a raw access mask is never missed and a reviewer always sees the complete change.
+
 **Links.** mishpat compares the links of a GPO by target, without regard to case. A link that appears or disappears is `added` or `removed`. A link whose enabled or enforced state differs is `changed`. A link target is written in the form a report uses, such as `corp.example/Servers`.
 
 Link order is a property of a scope, not of a GPO, so it is a separate difference under [Domain structure](#report-sections). For each scope that both inputs record, mishpat takes the GPOs that are linked there in both inputs and compares their order. A GPO linked on one side only does not count, so adding one link does not make every later link look moved. The difference is `changed`, with the GPO names in order before and after. Its subject is the scope's distinguished name followed by `: link order`.
@@ -173,6 +177,7 @@ Gaps list what mishpat did not compare, and why. They do not make a comparison i
 | `WMI filter` | One input cannot say whether the GPO has a filter. |
 | `WMI filter query` | Both versions of the GPO have a filter, and one input does not record the query. Only a bundle records the query. |
 | `security filtering and permissions` | One input does not record the permissions of the GPO. |
+| `GPO owner, group and raw security descriptor` | One input does not record the owner, the primary group, or the `SDDL` text of the GPO. |
 | `links` | One input does not record the links of the GPO, such as a backup without its `gpreport.xml`. |
 | `Registry.pol values` | The inputs are not both backups or bundles read in full. |
 | `link order and blocked inheritance` | One input does not record the structure of the domain. Only a bundle does. |
@@ -253,7 +258,7 @@ The file is UTF-8 with no byte order mark, and its rows end with CRLF. A spreads
 
 ### Formula neutralization
 
-A spreadsheet can run a cell that starts with `=`, `+`, `-`, or `@`, or with a tab, a carriage return, or a line feed, as a formula. Some programs also accept the full-width forms of those four characters. mishpat gives every such cell a leading apostrophe, which spreadsheets show as plain text. Opening the file cannot run anything. This includes negative numbers: `-1` is written `'-1`. A program that reads the CSV should strip one leading apostrophe from a cell, or read the JSON report instead.
+A spreadsheet can run a cell that starts with `=`, `+`, `-`, or `@`, or with a tab, a carriage return, or a line feed, as a formula. Some programs also accept the full-width forms of those four characters. mishpat gives every such cell a leading apostrophe, which spreadsheets show as plain text. Opening the file cannot run anything. A plain negative number such as `-1` or `-0.5` is the exception: a spreadsheet reads it as a number, not a formula, so it is written as it is. A program that reads the CSV should strip one leading apostrophe from a cell, or read the JSON report instead.
 
 ## HTML report
 
@@ -265,7 +270,7 @@ A spreadsheet can run a cell that starts with `=`, `+`, `-`, or `@`, or with a t
 
 ## Invisible characters
 
-Group Policy data can hold characters that change how text looks rather than what it says: terminal escape sequences, right-to-left override marks, zero-width characters, soft hyphens, tag characters, and variation selectors. The HTML, Markdown, and CSV reports and the terminal show these as visible escapes. On the terminal, tabs and carriage returns are escaped too, so a value cannot move the cursor back over a line. A character in the Basic Multilingual Plane appears as `‮`, and any other character appears with eight digits, as `\U000e0041`. Tab and line breaks are kept in the reports. The JSON report keeps the exact values.
+Group Policy data can hold characters that change how text looks rather than what it says: terminal escape sequences, right-to-left override marks, zero-width characters, soft hyphens, tag characters, variation selectors, and spaces that look like a plain space (a no-break space, an en space, an ideographic space, and the rest), which would otherwise make two different values look the same. The HTML, Markdown, and CSV reports and the terminal show these as visible escapes. On the terminal, tabs and carriage returns are escaped too, so a value cannot move the cursor back over a line. A character in the Basic Multilingual Plane appears as `‮`, and any other character appears with eight digits, as `\U000e0041`. Tab and line breaks are kept in the reports. The JSON report keeps the exact values.
 
 ## JSON schemas
 

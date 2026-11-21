@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from faithful_mishpat.compare import compare
 from faithful_mishpat.errors import InputError, UsageError
-from faithful_mishpat.inputs import display_name, read_side
+from faithful_mishpat.inputs import display_name, read_side, shown_path
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -50,7 +50,7 @@ def fingerprint(path: Path) -> tuple[int, str]:
     """
     if not path.is_dir():
         if path.exists() and not path.is_file():
-            msg = f"cannot read {display_name(path)}: it is neither a regular file nor a folder"
+            msg = f"cannot read {shown_path(path)}: it is neither a regular file nor a folder"
             raise InputError(msg)
         return _file(path)
     lines = hashlib.sha256()
@@ -61,7 +61,7 @@ def fingerprint(path: Path) -> tuple[int, str]:
             key=lambda p: p.relative_to(path).as_posix(),
         )
     except OSError as exc:
-        msg = f"cannot read {display_name(path)}: {exc.strerror or exc}"
+        msg = f"cannot read {shown_path(path)}: {exc.strerror or exc}"
         raise InputError(msg) from exc
     for member in members:
         size, digest = _file(member)
@@ -80,7 +80,7 @@ def _file(path: Path) -> tuple[int, str]:
                 digest.update(block)
                 size += len(block)
     except OSError as exc:
-        msg = f"cannot read {display_name(path)}: {exc.strerror or exc}"
+        msg = f"cannot read {shown_path(path)}: {exc.strerror or exc}"
         raise InputError(msg) from exc
     return size, digest.hexdigest()
 
@@ -113,7 +113,7 @@ def run(
     prints = [fingerprint(before), fingerprint(after)]
     if prints[0] == prints[1]:
         msg = (
-            f"{display_name(before)} and {display_name(after)} have the same contents; "
+            f"{shown_path(before)} and {shown_path(after)} have the same contents; "
             "compare two different versions"
         )
         raise UsageError(msg)

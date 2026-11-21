@@ -11,7 +11,7 @@ One GPO element that cannot be read becomes a :class:`~faithful_mishpat.model.Pr
 the rest are still read. A file that is not a GPO report at all raises
 :class:`~faithful_mishpat.errors.InputError`.
 
-Mapping (``DESIGN.md``, "Report XML to Settings"):
+Mapping (see docs/formats.md, "Settings", and docs/adr/0006-comparison-rules.md):
 
 * ``Registry``: ``Policy`` is an ``Administrative Templates`` setting keyed by
   ``(Category, Name)``; ``RegistrySetting`` is a ``Registry`` setting keyed by
@@ -81,8 +81,13 @@ _IGNORED = frozenset(
         "GPOSettingOrder",
     }
 )
+_EXPLANATION = frozenset({"Explain", "Supported"})
 _SID = re.compile(r"[sS]-1-\d+(?:-\d+)+")
-_NUMBER = re.compile(r"-?\d+")
+_NUMBER = re.compile(r"-?[0-9]{1,20}")
+"""A whole number mishpat reads as a number: ASCII digits, at most 20 (a 64-bit value).
+
+Anything longer, or in other digits, stays text. Python refuses to convert thousands of digits,
+and such a number is not a registry value or a version."""
 _POLICY_NON_ELEMENTS = frozenset(
     {"Name", "State", "Explain", "Supported", "Category", "Comment", "Text"}
 )
@@ -93,7 +98,6 @@ _GPP_LABELS = {
 }
 _GPP_DROPPED = frozenset({"changed", "image", "status", "uid", "descr"})
 _GPP_SKIPPED = frozenset({"GPOSettingOrder", "Filters", "Properties"})
-_EFFECTIVE = ("computer", "user")
 
 
 @dataclass
@@ -181,10 +185,6 @@ def _attribute_name(key: str) -> str:
     return key.rpartition("}")[2]
 
 
-def _json(value: ValueData) -> str:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False)
-
-
 def _whole_content(element: ET.Element) -> list[object]:
     """Everything an element holds: names, attributes, text, children and the text after each."""
     return [
@@ -211,6 +211,7 @@ def canonical(
     *,
     drop: frozenset[str] = frozenset(),
     sort: frozenset[str] = frozenset({"Member"}),
+    ignore: frozenset[str] = _IGNORED,
 ) -> ValueData:
     """Return an element's content as plain data: attributes, text and children.
 
@@ -219,7 +220,8 @@ def canonical(
     namespaces never collide; only XML Schema instance attributes are left out. Text
     beside children is ``#text``, repeated children are lists (sorted for the names in
     ``sort``), and ``xsi:nil`` is ``None``. The ignored names (see the module
-    documentation) and the attribute names in ``drop`` are left out. SIDs are upper
+    documentation, or ``ignore`` when given) and the attribute names in ``drop`` are left out.
+    Text that follows a child element is kept, as ``#tail``. SIDs are upper
     case. A stored password (``cpassword``), as an attribute or as a whole element of
     any shape, is replaced by :func:`faithful_mishpat.formats.hidden.hide`.
     """
@@ -234,9 +236,12 @@ def canonical(
     children: dict[str, list[ValueData]] = {}
     for child in element:
         name = _local(child)
-        if name not in _IGNORED:
-            item = canonical(child, drop=drop, sort=sort)
+        if name not in ignore:
+            item = canonical(child, drop=drop, sort=sort, ignore=ignore)
             children.setdefault(name, []).append(item)
+    tails = [
+        tail for child in element if _local(child) not in ignore and (tail := _clean(child.tail))
+    ]
     if not attributes and not children:
         return text
     out: dict[str, ValueData] = {
@@ -245,6 +250,8 @@ def canonical(
     }
     if text:
         out["#text"] = text
+    if tails:
+        out["#tail"] = tails[0] if len(tails) == 1 else list(tails)
     for name in sorted(children):
         items = children[name]
         if name in sort:
@@ -791,7 +798,12 @@ def _generic_key(element: ET.Element, *, unique: bool, value: ValueData) -> tupl
 
 
 def _generic(scope: _Scope, element: ET.Element, *, unique: bool) -> None:
-    value = canonical(element)
+    # Inside an extension mishpat has no reader for, only the explanation text is left out
+    # (Explain, Supported). A nested element called Blocked, ReadTime or the like is
+    # compared: it may be a real setting, and a false difference is safer than a missed one.
+    # The other names in _IGNORED are dropped only where they are direct children of
+    # Extension (see _extension_children).
+    value = canonical(element, ignore=_EXPLANATION)
     key = _generic_key(element, unique=unique, value=value)
     scope.add(
         element,
@@ -873,7 +885,90 @@ def _dedupe(settings: list[Setting]) -> list[Setting]:
 # --- GPO level ------------------------------------------------------------------------
 
 
-def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
+_SDDL_HEAD = re.compile(
+    r"(?:O:(?P<owner>S-1(?:-\d+)+|[A-Z]{2}))?(?:G:(?P<group>S-1(?:-\d+)+|[A-Z]{2}))?(?=[DS]:|$)"
+)
+_MASK = re.compile(r"[0-9]{1,10}")
+
+
+@dataclass
+class _Descriptor:
+    """What a GPO's ``SecurityDescriptor`` element held, as far as mishpat can read it."""
+
+    trustees: list[Trustee] | None = None
+    sddl: str | None = None
+    owner: str | None = None
+    owner_name: str = ""
+    group: str | None = None
+    group_name: str = ""
+
+
+def _principal(descriptor: ET.Element, local: str) -> tuple[str, str] | None:
+    """Return ``(id, name)`` of a child ``Owner`` or ``Group``; ``None`` when there is none.
+
+    The element is found by its local name in any namespace, because mishpat has not seen
+    real ``Get-GPOReport`` output that holds one (see docs/limitations.md). An element that
+    holds neither a SID nor a name returns ``("", "")``.
+    """
+    for child in descriptor:
+        if _local(child) != local:
+            continue
+        sid = name = ""
+        for part in child:
+            if _local(part) == "SID":
+                sid = (part.text or "").strip().upper()
+            elif _local(part) == "Name":
+                name = (part.text or "").strip()
+        return sid or name, name
+    return None
+
+
+def _descriptor(
+    descriptor: ET.Element | None, base: Source, problems: list[Problem]
+) -> _Descriptor:
+    """Read the owner, group, SDDL text and permission entries of a GPO."""
+    if descriptor is None:
+        return _Descriptor()
+    found = _Descriptor(trustees=_trustees(descriptor, base, problems))
+    sddl = _text(descriptor, "SDDL", SECURITY_TYPES)
+    found.sddl = sddl or None
+    if sddl:
+        head = _SDDL_HEAD.match(sddl)
+        if head is None:
+            where = Source(base.file, f"{base.detail} SecurityDescriptor/SDDL".strip())
+            problems.append(
+                Problem(
+                    where,
+                    "the SDDL text does not start with an owner and group in the form mishpat "
+                    "reads, so the owner and group were not compared from it",
+                )
+            )
+        else:
+            found.owner = head["owner"].upper() if head["owner"] else None
+            found.group = head["group"].upper() if head["group"] else None
+    for local, attribute in (("Owner", "owner"), ("Group", "group")):
+        principal = _principal(descriptor, local)
+        if principal is None:
+            continue
+        if not principal[0]:
+            where = Source(base.file, f"{base.detail} SecurityDescriptor/{local}".strip())
+            problems.append(
+                Problem(where, f"the {local} element holds no SID or name; it was not compared")
+            )
+            continue
+        setattr(found, attribute, principal[0])
+        setattr(found, f"{attribute}_name", principal[1])
+    return found
+
+
+def _mask(entry: ET.Element) -> int | None:
+    text = _text(entry, "AccessMask", SECURITY_TYPES)
+    return int(text) if text is not None and _MASK.fullmatch(text) else None
+
+
+def _trustees(
+    descriptor: ET.Element | None, base: Source, problems: list[Problem]
+) -> list[Trustee] | None:
     if (
         descriptor is None
         or (_text(descriptor, "PermissionsPresent", SECURITY_TYPES) or "") != "true"
@@ -881,9 +976,10 @@ def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
         return None
     permissions = _find(descriptor, "Permissions", SECURITY_TYPES)
     found: list[Trustee] = []
-    for entry in (
+    entries = (
         _all(permissions, "TrusteePermissions", SECURITY_TYPES) if permissions is not None else []
-    ):
+    )
+    for number, entry in enumerate(entries, 1):
         trustee = _find(entry, "Trustee", SECURITY_TYPES)
         kind = _find(entry, "Type", SECURITY_TYPES)
         standard = _find(entry, "Standard", SECURITY_TYPES)
@@ -896,6 +992,20 @@ def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
             )
         } - {""}
         sid = _sid_or_name(trustee) if trustee is not None else ""
+        mask = _mask(entry)
+        if not rights and mask is None:
+            # A custom permission is written as an access mask. Without one there is nothing
+            # to compare, and silence would read as "this entry grants nothing".
+            where = Source(
+                base.file, f"{base.detail} SecurityDescriptor/TrusteePermissions[{number}]".strip()
+            )
+            problems.append(
+                Problem(
+                    where,
+                    f"the permission entry for {sid or 'an unnamed trustee'} has no named "
+                    "permission and no access mask that mishpat can read, so it was not compared",
+                )
+            )
         found.append(
             Trustee(
                 sid=sid,
@@ -903,6 +1013,7 @@ def _trustees(descriptor: ET.Element | None) -> list[Trustee] | None:
                 allow=(_text(kind, "PermissionType", SECURITY_TYPES) if kind is not None else None)
                 == "Allow",
                 rights=tuple(sorted(rights)),
+                access_mask=mask,
             )
         )
     return found
@@ -976,6 +1087,8 @@ def _conflicts(element: ET.Element, names: tuple[str, ...]) -> list[str]:
     out = []
     for local in names:
         copies = _all(element, local, SETTINGS)
+        if not copies[1:]:
+            continue  # nothing to contradict, and nothing to serialise
         if len({json.dumps(_whole_content(c), ensure_ascii=False) for c in copies}) > 1:
             out.append(local)
     return out
@@ -1044,14 +1157,22 @@ def _gpo(element: ET.Element, base: Source, problems: list[Problem]) -> Gpo:
     if not name:
         msg = "it has no Name"
         raise _BadGpoError(msg)
+    descriptor = (
+        _Descriptor()
+        if "SecurityDescriptor" in conflicts
+        else _descriptor(_find(element, "SecurityDescriptor", SETTINGS), base, problems)
+    )
     gpo = Gpo(
         guid=guid,
         domain=(_text(identity, "Domain", TYPES) if identity is not None else None) or "",
         name=name,
         source=base,
-        trustees=None
-        if "SecurityDescriptor" in conflicts
-        else _trustees(_find(element, "SecurityDescriptor", SETTINGS)),
+        trustees=descriptor.trustees,
+        sddl=descriptor.sddl,
+        owner=descriptor.owner,
+        owner_name=descriptor.owner_name,
+        group=descriptor.group,
+        group_name=descriptor.group_name,
         wmi_filter="unknown"
         if {"FilterName", "FilterDescription", "FilterDataAvailable"} & set(conflicts)
         else _wmi(element),
@@ -1106,45 +1227,54 @@ def read_report(data: bytes, base: Source) -> ReportRead:
             root other than ``<GPO>`` and ``<GPOS>``).
     """
     prefix = f"{base.file} is not a Get-GPOReport XML file: "
-    try:
-        root = xmlsafe.parse(data)
-    except xmlsafe.XmlError as exc:
-        raise InputError(prefix + str(exc)) from None
-    uri, local = xmlsafe.split(root.tag)
     result = ReportRead()
-    if (uri, local) == (SETTINGS, "GPO"):
-        entries = [(root, base)]
-    elif (uri, local) == ("", "GPOS"):
-        result.wrapped = True
-        entries = []
-        for number, child in enumerate(root, 1):
-            where = Source(base.file, f"{base.detail} GPO[{number}]".strip())
-            if xmlsafe.split(child.tag) == (SETTINGS, "GPO"):
-                entries.append((child, where))
-            else:
-                result.problems.append(
-                    Problem(
-                        where, f"Unexpected element <{_local(child)[:40]}> in <GPOS> was skipped"
-                    )
-                )
-        if not len(root):
-            result.problems.append(Problem(base, "The <GPOS> element holds no GPO"))
-    else:
-        raise InputError(prefix + f"the root element is <{local[:40]}>, not <GPO> or <GPOS>")
     seen: dict[str, Source] = {}
-    for element, where in entries:
+    count = 0
+
+    def read_one(element: ET.Element, where: Source) -> None:
         try:
             gpo = _gpo(element, where, result.problems)
         except _BadGpoError as exc:
             result.problems.append(Problem(where, f"This GPO was not read: {exc}"))
-            continue
+            return
         if gpo.guid in seen:
             result.problems.append(
                 Problem(where, f"The GPO {gpo.guid} appears twice; the later one was not read")
             )
-            continue
+            return
         seen[gpo.guid] = where
         result.gpos.append(gpo)
+
+    def receive(child: ET.Element) -> None:
+        # A child of <GPOS> is read as soon as it is complete, then dropped from the tree, so
+        # a capture of a whole domain is read one GPO at a time and not held whole.
+        nonlocal count
+        count += 1
+        where = Source(base.file, f"{base.detail} GPO[{count}]".strip())
+        if xmlsafe.split(child.tag) == (SETTINGS, "GPO"):
+            read_one(child, where)
+        else:
+            result.problems.append(
+                Problem(where, f"Unexpected element <{_local(child)[:40]}> in <GPOS> was skipped")
+            )
+
+    try:
+        root = xmlsafe.parse(
+            data,
+            max_elements=xmlsafe.MAX_ELEMENTS,
+            take=(("GPOS", "*"), receive),
+        )
+    except xmlsafe.XmlError as exc:
+        raise InputError(prefix + str(exc)) from None
+    uri, local = xmlsafe.split(root.tag)
+    if (uri, local) == (SETTINGS, "GPO"):
+        read_one(root, base)
+    elif (uri, local) == ("", "GPOS"):
+        result.wrapped = True
+        if not count:
+            result.problems.append(Problem(base, "The <GPOS> element holds no GPO"))
+    else:
+        raise InputError(prefix + f"the root element is <{local[:40]}>, not <GPO> or <GPOS>")
     return result
 
 
