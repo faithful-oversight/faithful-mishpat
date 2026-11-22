@@ -16,9 +16,11 @@ import os
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from faithful_core import xmlsafe
+from faithful_core.exitcodes import ExitCode
 
-from faithful_mishpat.cli import ExitCode, main
-from faithful_mishpat.formats import hidden, xmlsafe
+from faithful_mishpat.cli import main
+from faithful_mishpat.formats import hidden
 from faithful_mishpat.formats.report import canonical
 from tests import fixtures_gpo as fx
 from tests.fixtures_gpo import (

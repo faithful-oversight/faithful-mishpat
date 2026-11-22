@@ -5,7 +5,7 @@
 Accepted shapes: one ``<GPO>`` (namespace ``http://www.microsoft.com/GroupPolicy/Settings``)
 or an unnamespaced ``<GPOS>`` wrapping many (``Get-GPOReport -All``). Every element is
 identified by its namespace URI; the ``q1``/``q2`` prefixes in a file mean nothing.
-Parsing is done by :mod:`faithful_mishpat.formats.xmlsafe`.
+Parsing is done by ``faithful_core.xmlsafe``.
 
 One GPO element that cannot be read becomes a :class:`~faithful_mishpat.model.Problem` and
 the rest are still read. A file that is not a GPO report at all raises
@@ -47,8 +47,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from faithful_core import xmlsafe
+
 from faithful_mishpat.errors import InputError
-from faithful_mishpat.formats import hidden, xmlsafe
+from faithful_mishpat.formats import hidden
 from faithful_mishpat.model import (
     Gpo,
     Link,

@@ -7,9 +7,9 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+from faithful_core import xmlsafe
 
 from faithful_mishpat.errors import InputError
-from faithful_mishpat.formats import xmlsafe
 from faithful_mishpat.formats.report import ReportRead, canonical, read_report
 from faithful_mishpat.model import Gpo, Link, Setting, Source, Trustee, WmiFilter
 from tests import fixtures_gpo as fx

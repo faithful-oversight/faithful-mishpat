@@ -8,3 +8,4 @@ Each record explains one significant decision: its context, the decision, and it
 - [4. A JSON Lines export bundle with hashed files and a structure line](0004-export-bundle.md)
 - [5. Remote collection over WinRM](0005-remote-collection.md)
 - [6. Rules for comparing two versions of Group Policy](0006-comparison-rules.md)
+- [7. One shared core library for the Faithful Oversight tools](0007-shared-core-library.md)

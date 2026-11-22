@@ -5,24 +5,27 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from datetime import UTC, datetime
-from enum import IntEnum
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from faithful_mishpat import __version__, console, example, outputs, pipeline
+from faithful_core import xmlsafe
+from faithful_core.clock import now
+from faithful_core.collect.secrets import redact
+from faithful_core.console import finish, prepare, say
+from faithful_core.exitcodes import ExitCode
+from faithful_core.files import refuse_aliases
+from faithful_core.safety import command_line, terminal_line
+
+from faithful_mishpat import __version__, example, outputs, pipeline
 from faithful_mishpat.arguments import bounded
 from faithful_mishpat.collect import cli as collect_cli
-from faithful_mishpat.collect.secrets import redact
 from faithful_mishpat.compare import MATCHES
 from faithful_mishpat.errors import MishpatError, UsageError
-from faithful_mishpat.formats import backup, registrypol, xmlsafe
+from faithful_mishpat.formats import backup, registrypol
 from faithful_mishpat.outputs import render
-from faithful_mishpat.outputs.files import refuse_input_overwrite, write_files
-from faithful_mishpat.outputs.safety import command_line, terminal_line
+from faithful_mishpat.outputs.files import write_files
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -30,16 +33,6 @@ if TYPE_CHECKING:
 FORMATS = ("json", "md", "html", "csv")
 SCHEMAS = {"report": "report-v1", "export": "export-v1", "manifest": "manifest-v1"}
 FAIL_ON = ("differences", "incomplete", "never")
-
-
-class ExitCode(IntEnum):
-    """Process exit codes. These values are part of the public interface."""
-
-    OK = 0
-    FINDINGS = 1
-    USAGE = 2
-    INPUT_ERROR = 3
-    INTERNAL_ERROR = 4
 
 
 def _formats(text: str) -> list[str]:
@@ -134,27 +127,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _now() -> datetime:
-    """The report time: the clock, or ``SOURCE_DATE_EPOCH`` for a repeatable report."""
-    fixed = os.environ.get("SOURCE_DATE_EPOCH", "")
-    if fixed.isascii() and fixed.isdigit():
-        try:
-            return datetime.fromtimestamp(int(fixed), UTC)
-        except (OverflowError, OSError, ValueError):
-            pass
-    return datetime.now(UTC).replace(microsecond=0)
-
-
 _count = bounded(1, 1_000_000_000, "a whole number")
 
 
 def _compare(args: argparse.Namespace) -> int:
     # Before anything is read or written: a report must never replace or enter an input.
-    refuse_input_overwrite(
-        [args.before, args.after],
-        args.output,
-        [outputs.FILE_NAMES[f] for f in args.format if f in outputs.FILE_NAMES]
-        + [outputs.MANIFEST_NAME],
+    planned = [outputs.FILE_NAMES[f] for f in args.format if f in outputs.FILE_NAMES]
+    refuse_aliases(
+        [args.output / name for name in [*planned, outputs.MANIFEST_NAME]],
+        [("input", args.before), ("input", args.after)],
     )
     saved = registrypol.MAX_ENTRIES, backup.MAX_SCAN_FOLDERS, xmlsafe.MAX_ELEMENTS
     registrypol.MAX_ENTRIES = args.max_pol_entries
@@ -168,7 +149,7 @@ def _compare(args: argparse.Namespace) -> int:
     document = outputs.build_report(
         comparison,
         [vars(item) for item in inputs],
-        _now(),
+        now(),
         __version__,
         {"match": args.match, "fail_on": args.fail_on},
         after=after,
@@ -179,15 +160,15 @@ def _compare(args: argparse.Namespace) -> int:
     failed = args.fail_on != "never" and (
         not comparison.complete or (args.fail_on == "differences" and comparison.differences)
     )
-    console.say(render.terminal_summary(document))
+    say(render.terminal_summary(document))
     names = ", ".join(terminal_line(p.name) for p in written)
-    console.say(f"Reports written to {terminal_line(str(args.output))}: {names}")
+    say(f"Reports written to {terminal_line(str(args.output))}: {names}")
     return int(ExitCode.FINDINGS if failed else ExitCode.OK)
 
 
 def _schema(args: argparse.Namespace) -> int:
     name = f"schema/{SCHEMAS[args.name]}.schema.json"
-    console.say(files("faithful_mishpat").joinpath(name).read_text(encoding="utf-8"), end="")
+    say(files("faithful_mishpat").joinpath(name).read_text(encoding="utf-8"), end="")
     return int(ExitCode.OK)
 
 
@@ -198,7 +179,7 @@ def _example(args: argparse.Namespace) -> int:
     command = command_line(
         "mishpat", "compare", str(before), str(after), "-o", str(args.directory / "report")
     )
-    console.say(
+    say(
         f"Wrote a synthetic before and after to {terminal_line(str(args.directory))}. Try:\n"
         f"  {terminal_line(command)}"
     )
@@ -207,9 +188,9 @@ def _example(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line and return an exit code."""
-    console.prepare()
+    prepare()
     code = _run(argv)
-    console.finish()
+    finish()
     return code
 
 
@@ -226,13 +207,13 @@ def _run(argv: Sequence[str] | None) -> int:
     try:
         return int(args.run(args))
     except MishpatError as exc:
-        console.say(f"mishpat: error: {terminal_line(redact(str(exc)))}", err=True)
+        say(f"mishpat: error: {terminal_line(redact(str(exc)))}", error=True)
         return int(ExitCode.USAGE if isinstance(exc, UsageError) else ExitCode.INPUT_ERROR)
     except Exception as exc:  # noqa: BLE001 - last-resort handler keeps crashes distinct
         shown = terminal_line(redact(str(exc)))[:200]
-        console.say(
+        say(
             f"mishpat: internal error: {type(exc).__name__}: {shown}\n"
             "This is a bug in mishpat. Please report it.",
-            err=True,
+            error=True,
         )
         return int(ExitCode.INTERNAL_ERROR)

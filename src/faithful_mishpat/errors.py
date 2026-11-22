@@ -1,19 +1,26 @@
 # SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
 # SPDX-License-Identifier: Apache-2.0
-"""Exceptions raised by mishpat."""
+"""Exceptions raised by mishpat.
 
+The classes come from faithful-core. ``MishpatError`` is its ``FaithfulError``, so
+one ``except MishpatError`` also catches an error raised inside the library.
+"""
 
-class MishpatError(Exception):
-    """Base class for errors mishpat reports to the user."""
+from faithful_core.errors import (
+    CollectionError,
+    FaithfulError,
+    InputError,
+    OutputError,
+    UsageError,
+)
 
+__all__ = [
+    "CollectionError",
+    "InputError",
+    "MishpatError",
+    "OutputError",
+    "UsageError",
+]
 
-class InputError(MishpatError):
-    """An input file or configuration cannot be read or has the wrong shape."""
-
-
-class CollectionError(MishpatError):
-    """Live collection could not connect, authenticate, or read what it needs."""
-
-
-class UsageError(MishpatError):
-    """The command's options do not fit together, so nothing was attempted."""
+MishpatError = FaithfulError
+"""Base class for errors mishpat reports to the user."""

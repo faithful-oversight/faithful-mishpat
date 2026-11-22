@@ -17,15 +17,16 @@ spreadsheet that guesses the encoding wrongly can be told it is UTF-8 when impor
 from __future__ import annotations
 
 import csv
-import html
 import io
 import json
 import sys
 from typing import TYPE_CHECKING, Any
 
+from faithful_core.render import CSP, html_text, md_table, md_text, plural
+from faithful_core.safety import csv_cell, terminal
+
 from faithful_mishpat.differences import CATEGORIES
 from faithful_mishpat.model import SCOPES
-from faithful_mishpat.outputs.safety import csv_cell, escape_markdown, terminal, visible
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -47,8 +48,6 @@ CSV_COLUMNS = (
     "category", "kind", "gpo_guid", "gpo_name", "scope", "area", "subject", "before", "after",
     "note", "before_source", "after_source", "comparison_complete",
 )  # fmt: skip
-CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
-"""Content security policy: no scripts, no network access, no form submission."""
 
 CATEGORY_TITLES = {
     "gpo": "GPO",
@@ -79,10 +78,6 @@ _GPO_HEAD = ("Name", "GUID", "Status", "Differences")
 # Words ------------------------------------------------------------------------------
 
 
-def _plural(n: int, one: str, many: str | None = None) -> str:
-    return f"{n} {one if n == 1 else many or one + 's'}"
-
-
 def headline(report: Report) -> tuple[str, str]:
     """Say what the comparison found and whether it is complete, in plain words.
 
@@ -94,12 +89,12 @@ def headline(report: Report) -> tuple[str, str]:
     n, gpos = s["differences"], s["gpos_changed"]
     alone = s["by_kind"].get("only-before", 0) + s["by_kind"].get("only-after", 0)
     if alone:
-        lead, finish = _lead(n, gpos, s), f" ({_plural(alone, 'GPO')} in only one input)"
+        lead, finish = _lead(n, gpos, s), f" ({plural(alone, 'GPO')} in only one input)"
     else:
         lead, finish = _lead(n, gpos, s), ""
     if s["complete"]:
         return "complete", f"{lead}{finish}. Every input was read in full."
-    problems = _plural(s["problems"], "problem")
+    problems = plural(s["problems"], "problem")
     return "incomplete", (
         f"{lead}{finish}. Incomplete: {problems} with an input, so differences may be missing."
     )
@@ -109,12 +104,10 @@ def _lead(n: int, gpos: int, s: dict[str, Any]) -> str:
     if not n:
         return "No differences"
     if not gpos:
-        return f"{_plural(n, 'difference')} in the domain's structure"
+        return f"{plural(n, 'difference')} in the domain's structure"
     if s["scope_differences"]:
-        return (
-            f"{_plural(n, 'difference')} across {_plural(gpos, 'GPO')} and the domain's structure"
-        )
-    return f"{_plural(n, 'difference')} across {_plural(gpos, 'GPO')}"
+        return f"{plural(n, 'difference')} across {plural(gpos, 'GPO')} and the domain's structure"
+    return f"{plural(n, 'difference')} across {plural(gpos, 'GPO')}"
 
 
 def value_text(value: Any) -> str:
@@ -365,7 +358,7 @@ def _gpo_guid(g: dict[str, Any]) -> str:
 
 
 def _status_line(g: dict[str, Any]) -> str:
-    return f"{WORDS[g['status']].capitalize()}. {_plural(len(g['list']), 'difference')}."
+    return f"{WORDS[g['status']].capitalize()}. {plural(len(g['list']), 'difference')}."
 
 
 def _names(report: Report) -> dict[str, str]:
@@ -448,16 +441,6 @@ def _context_lines(context: dict[str, Any] | None, *, shorten: bool) -> list[tup
 # Markdown ---------------------------------------------------------------------------
 
 
-def _md(value: object) -> str:
-    return escape_markdown(str(value))
-
-
-def _md_table(head: tuple[str, ...], rows: Iterable[Iterable[object]]) -> list[str]:
-    lines = ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
-    lines += ["| " + " | ".join(_md(cell) for cell in row) + " |" for row in rows]
-    return lines
-
-
 def _md_differences(diffs: list[dict[str, Any]], *, shorten: bool, level: int) -> list[str]:
     """Differences grouped by category; ``level`` is the heading depth of a category."""
     shown, omitted = _budget(_groups(diffs), _limit(MAX_DIFFERENCES, shorten))
@@ -465,10 +448,10 @@ def _md_differences(diffs: list[dict[str, Any]], *, shorten: bool, level: int) -
     last = ""
     for category, sub, members in shown:
         if category != last:
-            lines += [f"{'#' * level} {_md(CATEGORY_TITLES[category])}", ""]
+            lines += [f"{'#' * level} {md_text(CATEGORY_TITLES[category])}", ""]
             last = category
         if sub:
-            lines += [f"{'#' * (level + 1)} {_md(sub)}", ""]
+            lines += [f"{'#' * (level + 1)} {md_text(sub)}", ""]
         with_note = any(d["note"] for d in members)
         head = (*_HEAD, *(("Note",) if with_note else ()), "Sources")
         rows = [
@@ -482,9 +465,9 @@ def _md_differences(diffs: list[dict[str, Any]], *, shorten: bool, level: int) -
             )
             for d in members
         ]
-        lines += [*_md_table(head, rows), ""]
+        lines += [*md_table(head, rows), ""]
     if omitted:
-        lines += [_md(_more(omitted + _count(shown), _count(shown), " differences")), ""]
+        lines += [md_text(_more(omitted + _count(shown), _count(shown), " differences")), ""]
     return lines
 
 
@@ -496,9 +479,9 @@ def _count(shown: list[tuple[str, str, list[dict[str, Any]]]]) -> int:
 def _md_list(title: str, intro: str, items: list[str], *, shorten: bool) -> list[str]:
     shown = items[: _limit(MAX_LISTED, shorten)]
     lines = [f"## {title}", "", *([intro, ""] if intro else [])]
-    lines += [f"- {_md(_shorten(item, shorten=shorten))}" for item in shown]
+    lines += [f"- {md_text(_shorten(item, shorten=shorten))}" for item in shown]
     if len(items) > len(shown):
-        lines.append(f"- {_md(_more(len(items), len(shown)))}")
+        lines.append(f"- {md_text(_more(len(items), len(shown)))}")
     return [*lines, ""]
 
 
@@ -516,13 +499,13 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
     lines = [
         f"# {TITLE}",
         "",
-        f"**{_md(text)}**",
+        f"**{md_text(text)}**",
         "",
         (
-            f"Before: {_md(comparison['before'])}. After: {_md(comparison['after'])}. "
-            f"GPOs paired by {_md(comparison['match'])}. "
-            f"Generated {_md(report['generated_at'])} by mishpat "
-            f"{_md(report['tool']['version'])}."
+            f"Before: {md_text(comparison['before'])}. After: {md_text(comparison['after'])}. "
+            f"GPOs paired by {md_text(comparison['match'])}. "
+            f"Generated {md_text(report['generated_at'])} by mishpat "
+            f"{md_text(report['tool']['version'])}."
         ),
         "",
     ]
@@ -533,9 +516,9 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
     shown = ranked[: _limit(MAX_ROWS, shorten)]
     if shown:
         rows = [(g["name"], _gpo_guid(g), WORDS[g["status"]], g["differences"]) for g in shown]
-        lines += _md_table(_GPO_HEAD, rows)
+        lines += md_table(_GPO_HEAD, rows)
         if len(ranked) > len(shown):
-            lines += ["", _md(_more(len(ranked), len(shown), " GPOs"))]
+            lines += ["", md_text(_more(len(ranked), len(shown), " GPOs"))]
     else:
         lines.append("No GPOs were compared.")
     lines.append("")
@@ -544,17 +527,17 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
     if not sections:
         lines += ["No GPO has a difference.", ""]
     for g in sections[: _limit(MAX_GPOS, shorten)]:
-        lines += [f"### {_md(g['name'])} ({_md(g['guid'])})", ""]
+        lines += [f"### {md_text(g['name'])} ({md_text(g['guid'])})", ""]
         lines += [
-            f"{_md(WORDS[g['status']].capitalize())}. {_plural(len(g['list']), 'difference')}.",
+            f"{md_text(WORDS[g['status']].capitalize())}. {plural(len(g['list']), 'difference')}.",
             "",
         ]
         context = _context_lines(g["context"], shorten=shorten)
-        lines += [f"- **{label}:** {_md(value)}" for label, value in context]
+        lines += [f"- **{label}:** {md_text(value)}" for label, value in context]
         lines += [""] if context else []
         lines += _md_differences(g["list"], shorten=shorten, level=4)
     if len(sections) > _limit(MAX_GPOS, shorten):
-        lines += [_md(_more(len(sections), _limit(MAX_GPOS, shorten), " GPOs")), ""]
+        lines += [md_text(_more(len(sections), _limit(MAX_GPOS, shorten), " GPOs")), ""]
     if scope_level:
         lines += ["## Domain structure", ""]
         lines += _md_differences(scope_level, shorten=shorten, level=3)
@@ -568,12 +551,12 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
         intro = "These could not be read, so differences they hold are not in this report."
         lines += _md_list("Problems", intro, items, shorten=shorten)
     lines += ["## Inputs", ""]
-    lines += _md_table(
+    lines += md_table(
         ("File", "Kind", "Bytes", "SHA-256"),
         [(i["name"], i["kind"], i["size"], i["sha256"]) for i in report["inputs"]],
     )
     lines += ["", "## Limitations", ""]
-    lines += [f"- {_md(item)}" for item in report["limitations"]]
+    lines += [f"- {md_text(item)}" for item in report["limitations"]]
     return "\n".join(lines) + "\n"
 
 
@@ -623,7 +606,7 @@ def terminal_summary(report: Report) -> str:
     lines = [f"mishpat {report['tool']['version']}", text]
     lines += [f"  {CATEGORY_TITLES[c]}: {n}" for c, n in s["by_category"].items()]
     if s["notices"]:
-        lines.append(f"  {_plural(s['notices'], 'notice')}: read them first.")
+        lines.append(f"  {plural(s['notices'], 'notice')}: read them first.")
     if state != "complete":
         lines.append("  See Problems in the report before relying on this result.")
     return "\n".join(terminal(line) for line in lines)
@@ -679,12 +662,8 @@ a{color:inherit;text-decoration:none}}
 """
 
 
-def _h(value: object) -> str:
-    return html.escape(visible(str(value)), quote=True)
-
-
 def _hv(value: Any, *, shorten: bool) -> str:
-    return f'<span class="val">{_h(_shown(value, shorten=shorten))}</span>'
+    return f'<span class="val">{html_text(_shown(value, shorten=shorten))}</span>'
 
 
 def _table(caption: str, head: tuple[str, ...], rows: Iterable[Iterable[str]]) -> str:
@@ -696,18 +675,18 @@ def _table(caption: str, head: tuple[str, ...], rows: Iterable[Iterable[str]]) -
         cells = "".join(f"<td>{cell}</td>" for cell in rest)
         body.append(f'<tr><th scope="row">{first}</th>{cells}</tr>')
     return (
-        f'<div class="tablewrap"><table><caption>{_h(caption)}</caption>'
+        f'<div class="tablewrap"><table><caption>{html_text(caption)}</caption>'
         f"<thead><tr>{heads}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
     )
 
 
 def _h_list(title: str, anchor: str, intro: str, items: list[str], *, shorten: bool) -> str:
     shown = items[: _limit(MAX_LISTED, shorten)]
-    body = "".join(f"<li>{_h(_shorten(item, shorten=shorten))}</li>" for item in shown)
+    body = "".join(f"<li>{html_text(_shorten(item, shorten=shorten))}</li>" for item in shown)
     if len(items) > len(shown):
-        body += f"<li>{_h(_more(len(items), len(shown)))}</li>"
-    lead = f"<p>{_h(intro)}</p>" if intro else ""
-    return f'<h2 id="{anchor}">{_h(title)}</h2>{lead}<ul class="list">{body}</ul>'
+        body += f"<li>{html_text(_more(len(items), len(shown)))}</li>"
+    lead = f"<p>{html_text(intro)}</p>" if intro else ""
+    return f'<h2 id="{anchor}">{html_text(title)}</h2>{lead}<ul class="list">{body}</ul>'
 
 
 def _h_differences(diffs: list[dict[str, Any]], *, shorten: bool, level: int) -> str:
@@ -716,26 +695,28 @@ def _h_differences(diffs: list[dict[str, Any]], *, shorten: bool, level: int) ->
     last = ""
     for category, sub, members in shown:
         if category != last:
-            parts.append(f"<h{level}>{_h(CATEGORY_TITLES[category])}</h{level}>")
+            parts.append(f"<h{level}>{html_text(CATEGORY_TITLES[category])}</h{level}>")
             last = category
         if sub:
-            parts.append(f"<h{level + 1}>{_h(sub)}</h{level + 1}>")
+            parts.append(f"<h{level + 1}>{html_text(sub)}</h{level + 1}>")
         with_note = any(d["note"] for d in members)
         head = (*_HEAD, *(("Note",) if with_note else ()), "Sources")
         rows = [
             (
-                _h(d["subject"]),
-                _h(WORDS[d["kind"]]),
+                html_text(d["subject"]),
+                html_text(WORDS[d["kind"]]),
                 _hv(_sides(d)[0], shorten=shorten),
                 f'<span class="chg">{_hv(_sides(d)[1], shorten=shorten)}</span>',
-                *((_h(_shorten(d["note"], shorten=shorten)),) if with_note else ()),
-                _h(_sources_line(d)),
+                *((html_text(_shorten(d["note"], shorten=shorten)),) if with_note else ()),
+                html_text(_sources_line(d)),
             )
             for d in members
         ]
         parts.append(_table(sub or CATEGORY_TITLES[category], head, rows))
     if omitted:
-        parts.append(f"<p>{_h(_more(omitted + _count(shown), _count(shown), ' differences'))}</p>")
+        parts.append(
+            f"<p>{html_text(_more(omitted + _count(shown), _count(shown), ' differences'))}</p>"
+        )
     return "".join(parts)
 
 
@@ -746,15 +727,20 @@ def _h_gpo_table(report: Report, anchors: dict[str, str], *, shorten: bool) -> s
         return "<p>No GPOs were compared.</p>"
     rows = []
     for g in shown:
-        name = _h(g["name"])
+        name = html_text(g["name"])
         if g["guid"] in anchors:
             name = f'<a href="#{anchors[g["guid"]]}">{name}</a>'
         rows.append(
-            (name, f"<code>{_h(_gpo_guid(g))}</code>", _h(WORDS[g["status"]]), _h(g["differences"]))
+            (
+                name,
+                f"<code>{html_text(_gpo_guid(g))}</code>",
+                html_text(WORDS[g["status"]]),
+                html_text(g["differences"]),
+            )
         )
     out = _table("GPOs compared", _GPO_HEAD, rows)
     if len(ranked) > len(shown):
-        out += f"<p>{_h(_more(len(ranked), len(shown), ' GPOs'))}</p>"
+        out += f"<p>{html_text(_more(len(ranked), len(shown), ' GPOs'))}</p>"
     return out
 
 
@@ -777,13 +763,13 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
     for g in shown_sections:
         anchor = anchors[g["guid"]]
         context = "".join(
-            f"<li><b>{_h(label)}:</b> {_h(value)}</li>"
+            f"<li><b>{html_text(label)}:</b> {html_text(value)}</li>"
             for label, value in _context_lines(g["context"], shorten=shorten)
         )
         changes.append(
-            f'<section aria-labelledby="{anchor}"><h3 id="{anchor}">{_h(g["name"])} '
-            f'<span class="muted small">{_h(g["guid"])}</span></h3>'
-            f"<p>{_h(_status_line(g))}</p>"
+            f'<section aria-labelledby="{anchor}"><h3 id="{anchor}">{html_text(g["name"])} '
+            f'<span class="muted small">{html_text(g["guid"])}</span></h3>'
+            f"<p>{html_text(_status_line(g))}</p>"
             + (f'<ul class="list ctx">{context}</ul>' if context else "")
             + _h_differences(g["list"], shorten=shorten, level=4)
             + "</section>"
@@ -792,7 +778,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
         changes.append("<p>No GPO has a difference.</p>")
     if len(sections) > len(shown_sections):
         more = _more(len(sections), len(shown_sections), " GPOs")
-        changes.append(f"<p>{_h(more)}</p>")
+        changes.append(f"<p>{html_text(more)}</p>")
     scope = ""
     if scope_level:
         scope = '<h2 id="scope">Domain structure</h2>' + _h_differences(
@@ -830,11 +816,16 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
         "Inputs",
         ("File", "Kind", "Bytes", "SHA-256"),
         [
-            (_h(i["name"]), _h(i["kind"]), _h(i["size"]), f"<code>{_h(i['sha256'])}</code>")
+            (
+                html_text(i["name"]),
+                html_text(i["kind"]),
+                html_text(i["size"]),
+                f"<code>{html_text(i['sha256'])}</code>",
+            )
             for i in report["inputs"]
         ],
     )
-    limits = "".join(f"<li>{_h(item)}</li>" for item in report["limitations"])
+    limits = "".join(f"<li>{html_text(item)}</li>" for item in report["limitations"])
     nav = (
         ('<a href="#notices">Notices</a>' if notices else "")
         + '<a href="#gpos">GPOs compared</a><a href="#changes">Changes by GPO</a>'
@@ -860,10 +851,12 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
 <header>
 <h1>{TITLE}</h1>
 <p class="state {state}" role="status"><span class="word">{icon} {_STATE_WORDS[state]}</span>\
-<span class="t">{_h(text)}</span></p>
-<p class="muted">Before: {_h(comparison["before"])}. After: {_h(comparison["after"])}. \
-GPOs paired by {_h(comparison["match"])}. Generated {_h(report["generated_at"])} by mishpat \
-{_h(report["tool"]["version"])}.</p>
+<span class="t">{html_text(text)}</span></p>
+<p class="muted">Before: {html_text(comparison["before"])}. \
+After: {html_text(comparison["after"])}. \
+GPOs paired by {html_text(comparison["match"])}. \
+Generated {html_text(report["generated_at"])} by mishpat \
+{html_text(report["tool"]["version"])}.</p>
 </header>
 {notices}
 <h2 id="gpos">GPOs compared</h2>
